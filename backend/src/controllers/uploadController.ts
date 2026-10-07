@@ -30,7 +30,7 @@ export const uploadMiddleware = multer({
   limits: {
     fileSize: 10 * 1024 * 1024, // 10MB limit
   },
-  fileFilter: (req, file, cb) => {
+  fileFilter: (req: any, file: any, cb: any) => {
     const ext = file.originalname.slice(file.originalname.lastIndexOf('.')).toLowerCase();
     if (ALLOWED_MIME_TYPES.has(file.mimetype) && ALLOWED_EXTENSIONS.has(ext)) {
       cb(null, true);

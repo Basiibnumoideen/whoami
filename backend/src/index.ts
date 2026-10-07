@@ -31,7 +31,10 @@ const allowedOrigins = [
 
 app.use(
   cors({
-    origin: (origin, callback) => {
+    origin: (
+      origin: string | undefined,
+      callback: (err: Error | null, allow?: boolean) => void
+    ) => {
       // Allow server-to-server or curl/mobile requests without origin header
       if (!origin) return callback(null, true);
       if (

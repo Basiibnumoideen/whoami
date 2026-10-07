@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import authRoutes from './authRoutes';
 import projectRoutes from './projectRoutes';
 import skillRoutes from './skillRoutes';
@@ -33,7 +33,7 @@ apiRouter.use('/admin', analyticsRoutes);
 apiRouter.use('/upload', uploadRoutes);
 
 // Health check endpoint
-apiRouter.get('/health', (req, res) => {
+apiRouter.get('/health', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'ok',
     service: 'Basi Portfolio API Core',
