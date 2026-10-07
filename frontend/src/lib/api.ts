@@ -93,9 +93,9 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     delete headers['Content-Type'];
   }
 
-  // 10s safety timeout to prevent hanging connections
+  // 45s safety timeout to accommodate Render free tier cold-start wakeups
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 10000);
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
 
   try {
     const response = await fetch(url, {
@@ -125,7 +125,11 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     clearTimeout(timeoutId);
     if (error.name === 'AbortError') {
       console.error(`[API] Request timed out for: ${endpoint}`);
-      throw new Error(`Request timed out after 10s: ${endpoint}`);
+      throw new Error(`Request timed out. Render backend may still be waking up. Please retry in a few seconds.`);
+    }
+    if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+      console.error(`[API Network Error] Could not connect to API at: ${url}`, error);
+      throw new Error(`Cannot connect to backend API (${url}). Check if NEXT_PUBLIC_API_URL is configured on Vercel or if the backend is awake.`);
     }
     throw error;
   }
