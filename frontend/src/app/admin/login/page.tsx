@@ -3,14 +3,14 @@
 import React, { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { 
-  ShieldCheck, 
-  Lock, 
-  User, 
-  Eye, 
-  EyeOff, 
-  ArrowRight, 
-  KeyRound, 
+import {
+  ShieldCheck,
+  Lock,
+  User,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  KeyRound,
   AlertCircle,
   CheckCircle2
 } from 'lucide-react';
@@ -49,11 +49,11 @@ function AdminLoginContent() {
 
     try {
       console.log('[Admin Login] Verifying credentials...');
-      const res = await api.auth.login({ 
-        email: identifier.trim(), 
-        password 
+      const res = await api.auth.login({
+        email: identifier.trim(),
+        password
       });
-      
+
       if (res.user?.forcePasswordChange) {
         setShowForceModal(true);
         setIsLoading(false);
@@ -197,7 +197,7 @@ function AdminLoginContent() {
             <div>
               <p className="text-foreground font-medium">Secured Environment Access</p>
               <p className="text-[10px] text-text-secondary mt-0.5 leading-relaxed">
-                Credentials sync dynamically from <code className="text-primary font-mono bg-primary/10 px-1 py-0.5 rounded">backend/.env</code>. Default username: <code className="text-foreground font-mono font-semibold">basi</code> or email: <code className="text-foreground font-mono font-semibold">admin@basi.dev</code>.
+                Credentials sync dynamically from <code className="text-primary font-mono bg-primary/10 px-1 py-0.5 rounded">backend/.env</code>.
               </p>
             </div>
           </div>
