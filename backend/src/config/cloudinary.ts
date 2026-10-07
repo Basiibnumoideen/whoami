@@ -1,4 +1,9 @@
-import 'dotenv/config';
+import path from 'path';
+import dotenv from 'dotenv';
+
+// Explicitly load backend/.env
+dotenv.config({ path: path.resolve(__dirname, '../../.env') });
+dotenv.config();
 import { v2 as cloudinary } from 'cloudinary';
 
 cloudinary.config({

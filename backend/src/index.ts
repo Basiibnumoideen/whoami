@@ -1,4 +1,9 @@
-import 'dotenv/config';
+import path from 'path';
+import dotenv from 'dotenv';
+
+// Explicitly load backend/.env whether run from workspace root or backend dir
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+dotenv.config();
 import express, { Express, Request, Response } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
