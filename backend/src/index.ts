@@ -27,12 +27,18 @@ app.use(
 );
 
 // CORS configuration for cookies and client requests
-const allowedOrigins = [
-  clientUrl,
+const rawClientUrls = (process.env.CLIENT_URL || 'http://localhost:3000')
+  .split(',')
+  .map((u) => u.trim().replace(/\/+$/, ''));
+
+const staticOrigins = [
   'http://localhost:3000',
   'http://127.0.0.1:3000',
   'http://localhost:3001',
+  'http://localhost:5173',
 ];
+
+const allowedOrigins = Array.from(new Set([...rawClientUrls, ...staticOrigins]));
 
 app.use(
   cors({
@@ -40,18 +46,31 @@ app.use(
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void
     ) => {
-      // Allow server-to-server or curl/mobile requests without origin header
+      // Allow server-to-server or requests without origin header (like mobile/Postman)
       if (!origin) return callback(null, true);
+
+      const cleanOrigin = origin.replace(/\/+$/, '');
+
+      // Allow if explicit in allowedOrigins
+      if (allowedOrigins.includes(cleanOrigin)) {
+        return callback(null, true);
+      }
+
+      // Automatically allow any Vercel domain (*.vercel.app)
+      if (cleanOrigin.endsWith('.vercel.app')) {
+        return callback(null, true);
+      }
+
+      // Allow localhost in non-production or for local debugging
       if (
-        allowedOrigins.includes(origin) ||
-        (process.env.NODE_ENV !== 'production' && (
-          origin.startsWith('http://localhost:') ||
-          origin.startsWith('http://127.0.0.1:')
-        ))
+        cleanOrigin.startsWith('http://localhost:') ||
+        cleanOrigin.startsWith('http://127.0.0.1:')
       ) {
         return callback(null, true);
       }
-      return callback(new Error('Blocked by CORS policy: Origin not allowed'));
+
+      console.warn(`[CORS] Origin not allowed: ${origin}`);
+      return callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
