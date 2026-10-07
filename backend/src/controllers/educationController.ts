@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Education } from '../models/Education';
-import { AuditLog } from '../models/AuditLog';
+import { recordAuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
 import { getParam } from '../utils/helpers';
@@ -39,14 +39,15 @@ export class EducationController {
         return;
       }
 
+      const author = req.user?.name || req.user?.email || 'Admin';
+
       if (mongoose.connection.readyState === 1) {
         const item = new Education(data);
         await item.save();
-        await AuditLog.create({
-          action: 'CREATED',
-          target: `Education: "${item.degree} at ${item.school}"`,
-          author: req.user?.name || 'Admin',
-          timestamp: new Date().toISOString(),
+        await recordAuditLog('CREATED', `Education: "${item.degree} at ${item.school}"`, author, {
+          degree: item.degree,
+          school: item.school,
+          id: item._id,
         });
         res.status(201).json({ success: true, message: 'Education created.', data: item });
         return;
@@ -54,6 +55,11 @@ export class EducationController {
 
       const mock = { _id: `edu-${Date.now()}`, ...data };
       memoryStore.education.push(mock);
+      await recordAuditLog('CREATED', `Education: "${mock.degree} at ${mock.school}"`, author, {
+        degree: mock.degree,
+        school: mock.school,
+        id: mock._id,
+      });
       res.status(201).json({ success: true, message: 'Education created.', data: mock });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to create education.', error: error.message });
@@ -63,6 +69,7 @@ export class EducationController {
   static async updateEducation(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const id = getParam(req.params.id);
+      const author = req.user?.name || req.user?.email || 'Admin';
 
       if (mongoose.connection.readyState === 1) {
         const item = await Education.findByIdAndUpdate(id, req.body, { new: true });
@@ -70,6 +77,11 @@ export class EducationController {
           res.status(404).json({ success: false, message: 'Education not found.' });
           return;
         }
+        await recordAuditLog('UPDATED', `Education: "${item.degree} at ${item.school}"`, author, {
+          degree: item.degree,
+          school: item.school,
+          id: item._id,
+        });
         res.status(200).json({ success: true, message: 'Education updated.', data: item });
         return;
       }
@@ -80,6 +92,9 @@ export class EducationController {
         return;
       }
       memoryStore.education[idx] = { ...memoryStore.education[idx], ...req.body };
+      await recordAuditLog('UPDATED', `Education: "${memoryStore.education[idx].degree} at ${memoryStore.education[idx].school}"`, author, {
+        id,
+      });
       res.status(200).json({ success: true, message: 'Education updated.', data: memoryStore.education[idx] });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to update education.', error: error.message });
@@ -89,14 +104,20 @@ export class EducationController {
   static async deleteEducation(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const id = getParam(req.params.id);
+      const author = req.user?.name || req.user?.email || 'Admin';
 
       if (mongoose.connection.readyState === 1) {
-        await Education.findByIdAndDelete(id);
+        const item = await Education.findByIdAndDelete(id);
+        const label = item ? `${item.degree} at ${item.school}` : id;
+        await recordAuditLog('DELETED', `Education: "${label}"`, author, { id });
         res.status(200).json({ success: true, message: 'Education deleted.' });
         return;
       }
 
+      const item = memoryStore.education.find(e => e._id === id);
+      const label = item ? `${item.degree} at ${item.school}` : id;
       memoryStore.education = memoryStore.education.filter(e => e._id !== id);
+      await recordAuditLog('DELETED', `Education: "${label}"`, author, { id });
       res.status(200).json({ success: true, message: 'Education deleted.' });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to delete education.', error: error.message });

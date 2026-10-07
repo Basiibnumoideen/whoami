@@ -78,6 +78,12 @@ export class ServiceController {
           res.status(404).json({ success: false, message: 'Service not found.' });
           return;
         }
+        await AuditLog.create({
+          action: 'UPDATED',
+          target: `Service: "${service.title}"`,
+          author: req.user?.name || 'Admin',
+          timestamp: new Date().toISOString(),
+        }).catch(() => null);
         res.status(200).json({ success: true, message: 'Service updated.', data: service });
         return;
       }
@@ -99,7 +105,15 @@ export class ServiceController {
       const id = getParam(req.params.id);
 
       if (mongoose.connection.readyState === 1) {
-        await Service.findByIdAndDelete(id);
+        const service = await Service.findByIdAndDelete(id);
+        if (service) {
+          await AuditLog.create({
+            action: 'DELETED',
+            target: `Service: "${service.title}"`,
+            author: req.user?.name || 'Admin',
+            timestamp: new Date().toISOString(),
+          }).catch(() => null);
+        }
         res.status(200).json({ success: true, message: 'Service deleted.' });
         return;
       }

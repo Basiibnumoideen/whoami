@@ -42,6 +42,10 @@ import {
   Globe,
   Image as ImageIcon,
   Video as VideoIcon,
+  ShieldAlert,
+  PlusCircle,
+  Edit3,
+  Filter,
 } from 'lucide-react';
 import { api, setStoredToken } from '@/lib/api';
 import { AnalyticsOverview } from '@/components/admin/analytics-overview';
@@ -62,6 +66,82 @@ type AdminTab =
   | 'now'
   | 'ai-kb'
   | 'audit';
+
+function formatAuditTime(timestamp?: string) {
+  if (!timestamp) return { full: 'Just now', ago: 'Just now' };
+  try {
+    const d = new Date(timestamp);
+    if (isNaN(d.getTime())) return { full: timestamp, ago: '' };
+    const full = d.toLocaleString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: true,
+    });
+    const diffSec = Math.floor((Date.now() - d.getTime()) / 1000);
+    let ago = 'Just now';
+    if (diffSec >= 60 && diffSec < 3600) ago = `${Math.floor(diffSec / 60)}m ago`;
+    else if (diffSec >= 3600 && diffSec < 86400) ago = `${Math.floor(diffSec / 3600)}h ago`;
+    else if (diffSec >= 86400 && diffSec < 604800) ago = `${Math.floor(diffSec / 86400)}d ago`;
+    else if (diffSec >= 604800) ago = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return { full, ago };
+  } catch {
+    return { full: timestamp, ago: '' };
+  }
+}
+
+function getAuditActionBadge(action: string) {
+  switch (action) {
+    case 'LOGIN':
+      return {
+        label: 'LOGIN',
+        className: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30',
+        icon: ShieldCheck,
+      };
+    case 'FAILED_LOGIN':
+      return {
+        label: 'FAILED LOGIN',
+        className: 'bg-rose-500/15 text-rose-400 border border-rose-500/30',
+        icon: ShieldAlert,
+      };
+    case 'LOGOUT':
+      return {
+        label: 'LOGOUT',
+        className: 'bg-slate-500/15 text-slate-300 border border-slate-500/30',
+        icon: LogOut,
+      };
+    case 'CREATED':
+      return {
+        label: 'CREATED',
+        className: 'bg-cyan-500/15 text-cyan-400 border border-cyan-500/30',
+        icon: PlusCircle,
+      };
+    case 'UPDATED':
+      return {
+        label: 'UPDATED',
+        className: 'bg-amber-500/15 text-amber-400 border border-amber-500/30',
+        icon: Edit3,
+      };
+    case 'DELETED':
+      return {
+        label: 'DELETED',
+        className: 'bg-red-500/15 text-red-400 border border-red-500/30',
+        icon: Trash2,
+      };
+    case 'SYNCED':
+    case 'INDEXED':
+    case 'DEPLOYED':
+    default:
+      return {
+        label: action,
+        className: 'bg-purple-500/15 text-purple-400 border border-purple-500/30',
+        icon: RefreshCw,
+      };
+  }
+}
 
 function DashboardContent() {
   const router = useRouter();
@@ -158,6 +238,9 @@ function DashboardContent() {
   const [testimonialsList, setTestimonialsList] = useState<any[]>([]);
   const [messagesList, setMessagesList] = useState<any[]>([]);
   const [auditLogsList, setAuditLogsList] = useState<any[]>([]);
+  const [auditSearch, setAuditSearch] = useState('');
+  const [auditFilter, setAuditFilter] = useState<'all' | 'auth' | 'created' | 'updated' | 'deleted'>('all');
+  const [isRefreshingAudit, setIsRefreshingAudit] = useState(false);
   const [siteSettings, setSiteSettings] = useState<any>({
     logo: '',
     favicon: '',
@@ -201,7 +284,7 @@ function DashboardContent() {
   // Load backend data from MongoDB Atlas
   const refreshAllData = async () => {
     try {
-      const [dash, sk, pr, bl, msg, set, srv, exp, edu, certs, tests] = await Promise.all([
+      const [dash, sk, pr, bl, msg, set, srv, exp, edu, certs, tests, auditLogs] = await Promise.all([
         api.analytics.getDashboard().catch(() => null),
         api.skills.getAll().catch(() => []),
         api.projects.getAll().catch(() => []),
@@ -213,11 +296,16 @@ function DashboardContent() {
         api.education.getAll().catch(() => []),
         api.certifications.getAll().catch(() => []),
         api.testimonials.getAll().catch(() => []),
+        api.analytics.getAuditLogs().catch(() => []),
       ]);
 
       if (dash?.stats) {
         setStats(dash.stats);
-        if (dash.recentAudits) setAuditLogsList(dash.recentAudits);
+      }
+      if (Array.isArray(auditLogs) && auditLogs.length > 0) {
+        setAuditLogsList(auditLogs);
+      } else if (dash?.recentAudits) {
+        setAuditLogsList(dash.recentAudits);
       }
       if (Array.isArray(sk)) setSkillsList(sk);
       if (Array.isArray(pr)) setProjectsList(pr);
@@ -255,6 +343,43 @@ function DashboardContent() {
       console.warn('Refresh error:', err);
     }
   };
+
+  const handleRefreshAuditLogs = async () => {
+    try {
+      setIsRefreshingAudit(true);
+      const logs = await api.analytics.getAuditLogs();
+      if (Array.isArray(logs)) setAuditLogsList(logs);
+    } catch (err) {
+      console.error('Failed to refresh audit logs:', err);
+    } finally {
+      setIsRefreshingAudit(false);
+    }
+  };
+
+  const filteredAuditLogs = useMemo(() => {
+    return auditLogsList.filter((log: any) => {
+      if (auditFilter === 'auth') {
+        if (!['LOGIN', 'FAILED_LOGIN', 'LOGOUT'].includes(log.action)) return false;
+      } else if (auditFilter === 'created') {
+        if (log.action !== 'CREATED') return false;
+      } else if (auditFilter === 'updated') {
+        if (log.action !== 'UPDATED') return false;
+      } else if (auditFilter === 'deleted') {
+        if (log.action !== 'DELETED') return false;
+      }
+
+      if (auditSearch.trim()) {
+        const q = auditSearch.toLowerCase();
+        const target = (log.target || '').toLowerCase();
+        const author = (log.author || '').toLowerCase();
+        const action = (log.action || '').toLowerCase();
+        const metaStr = log.metadata ? JSON.stringify(log.metadata).toLowerCase() : '';
+        return target.includes(q) || author.includes(q) || action.includes(q) || metaStr.includes(q);
+      }
+
+      return true;
+    });
+  }, [auditLogsList, auditFilter, auditSearch]);
 
   useEffect(() => {
     if (!isVerifying) {
@@ -2699,31 +2824,192 @@ function DashboardContent() {
         )}
 
         {/* ========================================================================= */}
-        {/* TAB 14: AUDIT TRAIL                                                       */}
+        {/* TAB 14: AUDIT TRAIL & SECURITY LOG                                        */}
         {/* ========================================================================= */}
         {activeTab === 'audit' && (
-          <div className="glass-card p-6 rounded-3xl border border-border/80 space-y-4 animate-in fade-in duration-200">
-            <div>
-              <h2 className="text-xl font-bold mb-1">Audit Trail & Security Log</h2>
-              <p className="text-xs text-text-secondary">Immutable log of system modifications and administrative events.</p>
+          <div className="space-y-6 animate-in fade-in duration-200">
+            {/* Header Card */}
+            <div className="glass-card p-6 rounded-3xl border border-border/80 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2.5">
+                  <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
+                    <History className="w-5 h-5 text-primary" />
+                    Audit Trail & Security Log
+                  </h2>
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-[10px] font-mono font-bold">
+                    LIVE IMMUTABLE LOGS
+                  </span>
+                </div>
+                <p className="text-xs text-text-secondary mt-1">
+                  Full administrative transparency tracking logins, logouts, asset updates, creations, and deletions.
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-xs font-mono text-text-secondary">
+                  Showing <strong className="text-foreground">{filteredAuditLogs.length}</strong> of {auditLogsList.length}
+                </span>
+                <button
+                  onClick={handleRefreshAuditLogs}
+                  disabled={isRefreshingAudit}
+                  className="inline-flex items-center gap-2 px-3.5 py-2 rounded-xl bg-surface-elevated/80 border border-border/60 hover:border-primary text-xs font-semibold text-foreground transition-all cursor-pointer disabled:opacity-50"
+                  title="Reload live audit logs"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshingAudit ? 'animate-spin text-primary' : ''}`} />
+                  <span>{isRefreshingAudit ? 'Refreshing...' : 'Refresh Logs'}</span>
+                </button>
+              </div>
             </div>
 
-            <div className="space-y-2">
-              {auditLogsList.map((log, i) => (
-                <div key={i} className="p-3.5 rounded-2xl bg-surface-elevated/50 border border-border/40 flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-3">
-                    <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-primary/10 text-primary font-bold">
-                      {log.action}
-                    </span>
-                    <span className="font-semibold text-foreground">{log.target}</span>
-                  </div>
-                  <div className="flex items-center gap-4 text-text-secondary text-[11px] font-mono">
-                    <span>{log.author}</span>
-                    <span>{new Date(log.timestamp).toLocaleTimeString()}</span>
-                  </div>
-                </div>
-              ))}
+            {/* Filter and Search Bar */}
+            <div className="glass-card p-4 rounded-2xl border border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              {/* Search Box */}
+              <div className="relative flex-1 max-w-md">
+                <Search className="w-4 h-4 text-text-secondary absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={auditSearch}
+                  onChange={e => setAuditSearch(e.target.value)}
+                  placeholder="Search by action, target, author, or IP..."
+                  className="w-full bg-surface-elevated/60 border border-border/60 rounded-xl pl-9 pr-8 py-2 text-xs text-foreground placeholder:text-text-secondary/60 outline-none focus:border-primary transition-colors"
+                />
+                {auditSearch && (
+                  <button
+                    onClick={() => setAuditSearch('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-foreground cursor-pointer"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Action Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 text-xs">
+                {[
+                  { id: 'all', label: 'All', count: auditLogsList.length },
+                  {
+                    id: 'auth',
+                    label: 'Auth & Logins',
+                    count: auditLogsList.filter(l => ['LOGIN', 'FAILED_LOGIN', 'LOGOUT'].includes(l.action)).length,
+                  },
+                  {
+                    id: 'created',
+                    label: 'Created',
+                    count: auditLogsList.filter(l => l.action === 'CREATED').length,
+                  },
+                  {
+                    id: 'updated',
+                    label: 'Updated',
+                    count: auditLogsList.filter(l => l.action === 'UPDATED').length,
+                  },
+                  {
+                    id: 'deleted',
+                    label: 'Deleted',
+                    count: auditLogsList.filter(l => l.action === 'DELETED').length,
+                  },
+                ].map(tab => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setAuditFilter(tab.id as any)}
+                    className={`px-3 py-1.5 rounded-xl font-mono text-[11px] font-semibold transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                      auditFilter === tab.id
+                        ? 'gradient-brand-bg text-white shadow-sm'
+                        : 'bg-surface-elevated/60 border border-border/50 text-text-secondary hover:text-foreground'
+                    }`}
+                  >
+                    <span>{tab.label}</span>
+                    <span className="opacity-70 text-[10px]">({tab.count})</span>
+                  </button>
+                ))}
+              </div>
             </div>
+
+            {/* Audit Log Entries List */}
+            {filteredAuditLogs.length === 0 ? (
+              <div className="glass-card p-12 rounded-3xl border border-dashed border-border/80 text-center space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-surface-elevated text-text-secondary mx-auto flex items-center justify-center">
+                  <History className="w-6 h-6 opacity-60" />
+                </div>
+                <h3 className="text-base font-bold text-foreground">No audit entries found</h3>
+                <p className="text-xs text-text-secondary max-w-sm mx-auto">
+                  {auditSearch.trim() || auditFilter !== 'all'
+                    ? 'No audit log records matched your search query or filter. Try clearing filters.'
+                    : 'No administrative changes have been recorded yet. Any login, project update, or skill modification will appear here immediately.'}
+                </p>
+                {(auditSearch.trim() || auditFilter !== 'all') && (
+                  <button
+                    onClick={() => {
+                      setAuditSearch('');
+                      setAuditFilter('all');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-surface-elevated border border-border text-xs font-semibold text-foreground hover:border-primary transition-all cursor-pointer"
+                  >
+                    Reset All Filters
+                  </button>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                {filteredAuditLogs.map((log: any, idx: number) => {
+                  const badge = getAuditActionBadge(log.action);
+                  const BadgeIcon = badge.icon;
+                  const timeInfo = formatAuditTime(log.timestamp || log.createdAt);
+
+                  return (
+                    <div
+                      key={log._id || idx}
+                      className="p-4 rounded-2xl glass-card border border-border/70 hover:border-primary/40 transition-all space-y-2 group"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                        {/* Action Badge & Target Title */}
+                        <div className="flex items-center gap-3 flex-wrap">
+                          <span
+                            className={`inline-flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-0.5 rounded-full font-bold border shadow-xs ${badge.className}`}
+                          >
+                            <BadgeIcon className="w-3.5 h-3.5" />
+                            {badge.label}
+                          </span>
+                          <span className="font-bold text-foreground text-sm group-hover:text-primary transition-colors">
+                            {log.target}
+                          </span>
+                        </div>
+
+                        {/* Author & Timestamp */}
+                        <div className="flex items-center gap-3 text-xs font-mono text-text-secondary sm:text-right">
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-elevated/70 border border-border/40 text-[11px]">
+                            <span className="text-text-secondary/70">by</span>
+                            <span className="font-semibold text-foreground">{log.author}</span>
+                          </div>
+                          <div className="flex flex-col sm:items-end">
+                            <span className="text-[11px] text-foreground font-semibold">{timeInfo.full}</span>
+                            <span className="text-[10px] text-text-secondary/70">{timeInfo.ago}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Metadata Chips if available */}
+                      {log.metadata && typeof log.metadata === 'object' && Object.keys(log.metadata).length > 0 && (
+                        <div className="pt-1.5 border-t border-border/40 flex items-center gap-2 flex-wrap text-[11px] font-mono text-text-secondary">
+                          <span className="text-[10px] uppercase font-bold text-text-secondary/60">Details:</span>
+                          {Object.entries(log.metadata).map(([key, val]: [string, any]) => {
+                            if (val === undefined || val === null || val === '') return null;
+                            const displayVal = typeof val === 'object' ? JSON.stringify(val) : String(val);
+                            return (
+                              <span
+                                key={key}
+                                className="px-2 py-0.5 rounded-md bg-surface-elevated/60 border border-border/50 text-[10px]"
+                              >
+                                <strong className="text-foreground">{key}:</strong> {displayVal.length > 50 ? `${displayVal.slice(0, 48)}...` : displayVal}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </div>

@@ -120,6 +120,7 @@ export class MessageController {
     try {
       const id = getParam(req.params.id);
       const { read } = req.body;
+      const author = req.user?.name || req.user?.email || 'Admin';
 
       if (mongoose.connection.readyState === 1) {
         const message = await Message.findById(id);
@@ -129,6 +130,13 @@ export class MessageController {
         }
         message.read = read !== undefined ? Boolean(read) : !message.read;
         await message.save();
+        await AuditLog.create({
+          action: 'UPDATED',
+          target: `Message from "${message.name}" marked as ${message.read ? 'Read' : 'Unread'}`,
+          author,
+          timestamp: new Date().toISOString(),
+          metadata: { id, read: message.read, email: message.email },
+        }).catch(() => null);
         res.status(200).json({ success: true, message: `Message status updated.`, data: message });
         return;
       }
@@ -151,6 +159,7 @@ export class MessageController {
   static async deleteMessage(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const id = getParam(req.params.id);
+      const author = req.user?.name || req.user?.email || 'Admin';
 
       if (mongoose.connection.readyState === 1) {
         const message = await Message.findByIdAndDelete(id);
@@ -158,6 +167,13 @@ export class MessageController {
           res.status(404).json({ success: false, message: 'Message not found.' });
           return;
         }
+        await AuditLog.create({
+          action: 'DELETED',
+          target: `Message from "${message.name}" (${message.email})`,
+          author,
+          timestamp: new Date().toISOString(),
+          metadata: { id, email: message.email },
+        }).catch(() => null);
         res.status(200).json({ success: true, message: 'Message deleted successfully.' });
         return;
       }

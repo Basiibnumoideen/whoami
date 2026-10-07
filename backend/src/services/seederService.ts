@@ -12,6 +12,10 @@ import { AIKnowledgeBase } from '../models/AIKnowledgeBase';
 import { AuditLog } from '../models/AuditLog';
 import { Certification } from '../models/Certification';
 import { Testimonial } from '../models/Testimonial';
+import { PageView } from '../models/PageView';
+import { Visitor } from '../models/Visitor';
+import { ProjectView } from '../models/ProjectView';
+import { ResumeDownload } from '../models/ResumeDownload';
 
 export const seedDatabase = async (): Promise<void> => {
   // Only execute database seeding when connected to MongoDB
@@ -357,6 +361,155 @@ export const seedDatabase = async (): Promise<void> => {
         },
       ]);
       console.log('✓ Seeded default testimonials');
+    }
+
+    // 12. Seed 30-Day Historical Analytics Telemetry if empty
+    const pageViewCount = await PageView.countDocuments();
+    const visitorCount = await Visitor.countDocuments();
+    if (pageViewCount === 0 || visitorCount === 0) {
+      console.log('⚡ Seeding baseline 30-day analytics telemetry...');
+      const now = Date.now();
+      const routes = ['/', '/projects', '/skills', '/about', '/contact', '/blog'];
+      const pageViewDocs: any[] = [];
+      const visitorDocs: any[] = [];
+      const projectViewDocs: any[] = [];
+      const downloadDocs: any[] = [];
+
+      for (let day = 29; day >= 0; day--) {
+        const dayTime = now - day * 24 * 60 * 60 * 1000;
+        const dateObj = new Date(dayTime);
+        const dayVariance = Math.sin((day + 4) / 2.2);
+        const visitorsToday = Math.max(8, Math.round(18 + dayVariance * 9 + (day % 4) * 2));
+        const viewsToday = Math.max(16, Math.round(visitorsToday * 2.3 + (day % 5) * 3));
+
+        for (let v = 0; v < visitorsToday; v++) {
+          const vIp = `198.51.100.${(day * 7 + v * 3 + 1) % 250 + 1}`;
+          visitorDocs.push({
+            ip: vIp,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            referrer: v % 2 === 0 ? 'https://google.com' : 'https://linkedin.com',
+            sessionId: `sess_seed_${day}_${v}`,
+            firstVisit: dateObj,
+            lastVisit: dateObj,
+            visitCount: 1 + (v % 3),
+            createdAt: dateObj,
+            updatedAt: dateObj,
+          });
+        }
+
+        for (let p = 0; p < viewsToday; p++) {
+          const route = routes[p % routes.length];
+          const vIp = `198.51.100.${(day * 7 + (p % visitorsToday) * 3 + 1) % 250 + 1}`;
+          pageViewDocs.push({
+            path: route,
+            title: route === '/' ? 'Home — Portfolio' : `${route.slice(1).toUpperCase()} — Portfolio`,
+            ip: vIp,
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+            referrer: 'https://google.com',
+            sessionId: `sess_seed_${day}_${p % visitorsToday}`,
+            createdAt: dateObj,
+          });
+        }
+
+        // Project views
+        if (day % 2 === 0) {
+          projectViewDocs.push({
+            projectId: 'proj-1',
+            projectSlug: 'nexus-ai-workspaces',
+            projectTitle: 'Nexus AI Workspaces',
+            ip: '198.51.100.12',
+            createdAt: dateObj,
+          });
+          projectViewDocs.push({
+            projectId: 'proj-2',
+            projectSlug: 'streamflow-distributed-pipeline',
+            projectTitle: 'StreamFlow Distributed Pipeline',
+            ip: '198.51.100.15',
+            createdAt: dateObj,
+          });
+        }
+
+        // Resume downloads
+        if (day % 3 === 0) {
+          downloadDocs.push({
+            ip: '198.51.100.22',
+            source: 'Direct Header Link',
+            createdAt: dateObj,
+          });
+        }
+      }
+
+      if (visitorDocs.length > 0) await Visitor.insertMany(visitorDocs);
+      if (pageViewDocs.length > 0) await PageView.insertMany(pageViewDocs);
+      if (projectViewDocs.length > 0) await ProjectView.insertMany(projectViewDocs);
+      if (downloadDocs.length > 0) await ResumeDownload.insertMany(downloadDocs);
+      console.log(`✓ Seeded ${visitorDocs.length} visitors and ${pageViewDocs.length} pageviews across 30 days`);
+    }
+
+    // 13. Seed Baseline Audit Logs if empty
+    const auditCount = await AuditLog.countDocuments();
+    if (auditCount <= 1) {
+      console.log('⚡ Seeding baseline audit trail log entries...');
+      const now = Date.now();
+      await AuditLog.insertMany([
+        {
+          action: 'LOGIN',
+          target: `Admin Logged In (${adminEmail || 'admin'})`,
+          author: 'Portfolio Admin',
+          timestamp: new Date(now - 1000 * 60 * 15).toISOString(),
+          metadata: { ip: '127.0.0.1', role: 'admin' },
+          createdAt: new Date(now - 1000 * 60 * 15),
+        },
+        {
+          action: 'UPDATED',
+          target: 'Global Site Settings & Theme Preferences',
+          author: 'Portfolio Admin',
+          timestamp: new Date(now - 1000 * 60 * 60 * 2).toISOString(),
+          metadata: { section: 'hero' },
+          createdAt: new Date(now - 1000 * 60 * 60 * 2),
+        },
+        {
+          action: 'CREATED',
+          target: 'Project: "Nexus AI Workspaces"',
+          author: 'Portfolio Admin',
+          timestamp: new Date(now - 1000 * 60 * 60 * 24).toISOString(),
+          metadata: { category: 'Full Stack' },
+          createdAt: new Date(now - 1000 * 60 * 60 * 24),
+        },
+        {
+          action: 'CREATED',
+          target: 'Project: "StreamFlow Distributed Pipeline"',
+          author: 'Portfolio Admin',
+          timestamp: new Date(now - 1000 * 60 * 60 * 36).toISOString(),
+          metadata: { category: 'Backend Architecture' },
+          createdAt: new Date(now - 1000 * 60 * 60 * 36),
+        },
+        {
+          action: 'SYNCED',
+          target: 'Cloudinary Media Asset Storage CDN',
+          author: 'System Initializer',
+          timestamp: new Date(now - 1000 * 60 * 60 * 48).toISOString(),
+          metadata: { provider: 'cloudinary' },
+          createdAt: new Date(now - 1000 * 60 * 60 * 48),
+        },
+        {
+          action: 'CREATED',
+          target: 'Skill Matrix & Technical Specializations',
+          author: 'Portfolio Admin',
+          timestamp: new Date(now - 1000 * 60 * 60 * 72).toISOString(),
+          metadata: { count: 18 },
+          createdAt: new Date(now - 1000 * 60 * 60 * 72),
+        },
+        {
+          action: 'LOGIN',
+          target: `Admin Session Initialized (${adminEmail || 'admin'})`,
+          author: 'Portfolio Admin',
+          timestamp: new Date(now - 1000 * 60 * 60 * 96).toISOString(),
+          metadata: { ip: '127.0.0.1' },
+          createdAt: new Date(now - 1000 * 60 * 60 * 96),
+        },
+      ]);
+      console.log('✓ Seeded baseline audit logs');
     }
 
   } catch (error: any) {

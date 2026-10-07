@@ -100,6 +100,12 @@ export class SkillController {
         }
         Object.assign(skill, req.body);
         await skill.save();
+        await AuditLog.create({
+          action: 'UPDATED',
+          target: `Skill: "${skill.name}" (${skill.category})`,
+          author: req.user?.name || 'Admin',
+          timestamp: new Date().toISOString(),
+        }).catch(() => null);
         res.status(200).json({ success: true, message: 'Skill updated.', data: skill });
         return;
       }
@@ -131,6 +137,12 @@ export class SkillController {
           res.status(404).json({ success: false, message: 'Skill not found.' });
           return;
         }
+        await AuditLog.create({
+          action: 'DELETED',
+          target: `Skill: "${skill.name}" (${skill.category})`,
+          author: req.user?.name || 'Admin',
+          timestamp: new Date().toISOString(),
+        }).catch(() => null);
         res.status(200).json({ success: true, message: 'Skill deleted.' });
         return;
       }

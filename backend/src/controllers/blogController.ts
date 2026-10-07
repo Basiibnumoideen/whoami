@@ -156,6 +156,12 @@ export class BlogController {
         Object.assign(blog, req.body);
         if (req.body.content) blog.readingTime = calculateReadingTime(req.body.content);
         await blog.save();
+        await AuditLog.create({
+          action: 'UPDATED',
+          target: `Blog Post: "${blog.title}"`,
+          author: req.user?.name || 'Admin',
+          timestamp: new Date().toISOString(),
+        }).catch(() => null);
         res.status(200).json({ success: true, message: 'Blog updated.', data: blog });
         return;
       }
@@ -187,6 +193,12 @@ export class BlogController {
           res.status(404).json({ success: false, message: 'Blog post not found.' });
           return;
         }
+        await AuditLog.create({
+          action: 'DELETED',
+          target: `Blog Post: "${blog.title}"`,
+          author: req.user?.name || 'Admin',
+          timestamp: new Date().toISOString(),
+        }).catch(() => null);
         res.status(200).json({ success: true, message: 'Blog deleted.' });
         return;
       }

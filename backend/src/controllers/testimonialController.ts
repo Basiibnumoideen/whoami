@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import mongoose from 'mongoose';
 import { Testimonial } from '../models/Testimonial';
-import { AuditLog } from '../models/AuditLog';
+import { recordAuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
 import { getParam } from '../utils/helpers';
@@ -38,14 +38,15 @@ export class TestimonialController {
         return;
       }
 
+      const author = req.user?.name || req.user?.email || 'Admin';
+
       if (mongoose.connection.readyState === 1) {
         const item = new Testimonial(data);
         await item.save();
-        await AuditLog.create({
-          action: 'CREATED',
-          target: `Testimonial from ${item.name}`,
-          author: req.user?.name || 'Admin',
-          timestamp: new Date().toISOString(),
+        await recordAuditLog('CREATED', `Testimonial from ${item.name}`, author, {
+          company: item.company,
+          role: item.role,
+          id: item._id,
         });
         res.status(201).json({ success: true, message: 'Testimonial created.', data: item });
         return;
@@ -53,6 +54,11 @@ export class TestimonialController {
 
       const mock = { _id: `test-${Date.now()}`, ...data };
       memoryStore.testimonials.push(mock);
+      await recordAuditLog('CREATED', `Testimonial from ${mock.name}`, author, {
+        company: mock.company,
+        role: mock.role,
+        id: mock._id,
+      });
       res.status(201).json({ success: true, message: 'Testimonial created.', data: mock });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to create testimonial.', error: error.message });
@@ -62,6 +68,7 @@ export class TestimonialController {
   static async updateTestimonial(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const id = getParam(req.params.id);
+      const author = req.user?.name || req.user?.email || 'Admin';
 
       if (mongoose.connection.readyState === 1) {
         const item = await Testimonial.findByIdAndUpdate(id, req.body, { new: true });
@@ -69,6 +76,11 @@ export class TestimonialController {
           res.status(404).json({ success: false, message: 'Testimonial not found.' });
           return;
         }
+        await recordAuditLog('UPDATED', `Testimonial from ${item.name}`, author, {
+          company: item.company,
+          role: item.role,
+          id: item._id,
+        });
         res.status(200).json({ success: true, message: 'Testimonial updated.', data: item });
         return;
       }
@@ -79,6 +91,9 @@ export class TestimonialController {
         return;
       }
       memoryStore.testimonials[idx] = { ...memoryStore.testimonials[idx], ...req.body };
+      await recordAuditLog('UPDATED', `Testimonial from ${memoryStore.testimonials[idx].name}`, author, {
+        id,
+      });
       res.status(200).json({ success: true, message: 'Testimonial updated.', data: memoryStore.testimonials[idx] });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to update testimonial.', error: error.message });
@@ -88,14 +103,20 @@ export class TestimonialController {
   static async deleteTestimonial(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
       const id = getParam(req.params.id);
+      const author = req.user?.name || req.user?.email || 'Admin';
 
       if (mongoose.connection.readyState === 1) {
-        await Testimonial.findByIdAndDelete(id);
+        const item = await Testimonial.findByIdAndDelete(id);
+        const name = item ? item.name : id;
+        await recordAuditLog('DELETED', `Testimonial from ${name}`, author, { id });
         res.status(200).json({ success: true, message: 'Testimonial deleted.' });
         return;
       }
 
+      const item = memoryStore.testimonials.find(t => t._id === id);
+      const name = item ? item.name : id;
       memoryStore.testimonials = memoryStore.testimonials.filter(t => t._id !== id);
+      await recordAuditLog('DELETED', `Testimonial from ${name}`, author, { id });
       res.status(200).json({ success: true, message: 'Testimonial deleted.' });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to delete testimonial.', error: error.message });

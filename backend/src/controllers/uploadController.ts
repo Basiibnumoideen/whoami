@@ -2,6 +2,7 @@ import { Response } from 'express';
 import multer from 'multer';
 import { CloudinaryService } from '../services/cloudinaryService';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
+import { recordAuditLog } from '../models/AuditLog';
 
 // Multer memory storage configuration
 const storage = multer.memoryStorage();
@@ -74,6 +75,14 @@ export class UploadController {
         folder,
         resourceType
       );
+
+      const author = req.user?.name || req.user?.email || 'Admin';
+      await recordAuditLog('CREATED', `Media Upload: "${req.file.originalname}"`, author, {
+        url: result.url,
+        folder,
+        bytes: result.bytes,
+        mimetype: req.file.mimetype,
+      });
 
       res.status(200).json({
         success: true,

@@ -70,6 +70,15 @@ export function AnalyticsOverview({ onNavigateTab }: AnalyticsOverviewProps) {
     return maxVal > 0 ? maxVal : 10;
   }, [activeSeries]);
 
+  // Aggregate totals for the active time window
+  const totalViewsInSeries = useMemo(() => {
+    return activeSeries.reduce((acc: number, cur: any) => acc + (cur.pageViews || 0), 0);
+  }, [activeSeries]);
+
+  const totalVisitorsInSeries = useMemo(() => {
+    return activeSeries.reduce((acc: number, cur: any) => acc + (cur.visitors || 0), 0);
+  }, [activeSeries]);
+
   // Handle manual test ping to populate real data
   const handleTestPing = async () => {
     try {
@@ -329,40 +338,6 @@ export function AnalyticsOverview({ onNavigateTab }: AnalyticsOverviewProps) {
         })}
       </div>
 
-      {/* 3. Empty State Check (Requirement 14) */}
-      {!hasData && (
-        <div className="glass-card p-10 rounded-3xl border border-dashed border-border/80 text-center space-y-4 my-4">
-          <div className="w-14 h-14 rounded-2xl bg-primary/10 text-primary mx-auto flex items-center justify-center border border-primary/20">
-            <BarChart3 className="w-7 h-7 animate-pulse" />
-          </div>
-          <div className="max-w-md mx-auto space-y-2">
-            <h3 className="text-lg font-bold text-foreground">No analytics data available yet</h3>
-            <p className="text-xs text-text-secondary leading-relaxed">
-              Real-time analytics collections have been initialized in MongoDB Atlas. As soon as visitors browse
-              your public portfolio, click case studies, or download your resume, live telemetry charts and activity logs
-              will populate immediately.
-            </p>
-          </div>
-          <div className="flex items-center justify-center gap-3 pt-2">
-            <button
-              onClick={handleTestPing}
-              disabled={isTestPinging}
-              className="px-4 py-2 rounded-xl bg-surface-elevated border border-border hover:border-primary text-xs font-semibold text-foreground transition-all cursor-pointer"
-            >
-              {isTestPinging ? 'Sending Ping...' : 'Record Test Telemetry Ping'}
-            </button>
-            <a
-              href="/"
-              target="_blank"
-              rel="noreferrer"
-              className="px-4 py-2 rounded-xl gradient-brand-bg text-white text-xs font-semibold hover:opacity-95 transition-opacity"
-            >
-              Open Portfolio Website
-            </a>
-          </div>
-        </div>
-      )}
-
       {/* 4. Analytics Charts Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Visitors & Page Views Timeline (2 cols) */}
@@ -377,24 +352,38 @@ export function AnalyticsOverview({ onNavigateTab }: AnalyticsOverviewProps) {
                 <p className="text-xs text-text-secondary">Unique visitors and route pageviews over time</p>
               </div>
 
-              {/* Time Range Toggle */}
-              <div className="flex items-center p-1 rounded-xl bg-surface-elevated border border-border/60 max-w-fit">
-                <button
-                  onClick={() => setTimeRange('7d')}
-                  className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
-                    timeRange === '7d' ? 'gradient-brand-bg text-white shadow-sm' : 'text-text-secondary hover:text-foreground'
-                  }`}
-                >
-                  Last 7 Days
-                </button>
-                <button
-                  onClick={() => setTimeRange('30d')}
-                  className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
-                    timeRange === '30d' ? 'gradient-brand-bg text-white shadow-sm' : 'text-text-secondary hover:text-foreground'
-                  }`}
-                >
-                  Last 30 Days
-                </button>
+              <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-surface-elevated/80 border border-border/50 text-[11px] font-mono">
+                  <span className="flex items-center gap-1.5 text-cyan-400 font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-cyan-400" />
+                    {totalViewsInSeries.toLocaleString()} Views
+                  </span>
+                  <span className="text-border">|</span>
+                  <span className="flex items-center gap-1.5 text-indigo-400 font-semibold">
+                    <span className="w-2 h-2 rounded-full bg-indigo-400" />
+                    {totalVisitorsInSeries.toLocaleString()} Unique
+                  </span>
+                </div>
+
+                {/* Time Range Toggle */}
+                <div className="flex items-center p-1 rounded-xl bg-surface-elevated border border-border/60 max-w-fit">
+                  <button
+                    onClick={() => setTimeRange('7d')}
+                    className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                      timeRange === '7d' ? 'gradient-brand-bg text-white shadow-sm' : 'text-text-secondary hover:text-foreground'
+                    }`}
+                  >
+                    Last 7 Days
+                  </button>
+                  <button
+                    onClick={() => setTimeRange('30d')}
+                    className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                      timeRange === '30d' ? 'gradient-brand-bg text-white shadow-sm' : 'text-text-secondary hover:text-foreground'
+                    }`}
+                  >
+                    Last 30 Days
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -409,8 +398,8 @@ export function AnalyticsOverview({ onNavigateTab }: AnalyticsOverviewProps) {
                   {/* Chart Bars/Columns */}
                   <div className="flex-1 flex items-end gap-1.5 sm:gap-2.5 pb-6 border-b border-border/50 relative">
                     {activeSeries.map((point: any, idx: number) => {
-                      const visitorHeight = Math.max(4, Math.round(((point.visitors || 0) / maxVisitorsInSeries) * 100));
-                      const pageViewHeight = Math.max(4, Math.round(((point.pageViews || 0) / maxVisitorsInSeries) * 100));
+                      const visitorHeight = Math.max(6, Math.round(((point.visitors || 0) / maxVisitorsInSeries) * 100));
+                      const pageViewHeight = Math.max(6, Math.round(((point.pageViews || 0) / maxVisitorsInSeries) * 100));
 
                       return (
                         <div
@@ -433,12 +422,12 @@ export function AnalyticsOverview({ onNavigateTab }: AnalyticsOverviewProps) {
                             {/* PageViews Bar */}
                             <div
                               style={{ height: `${pageViewHeight}%` }}
-                              className="w-1/2 rounded-t-sm bg-cyan-400/80 group-hover:bg-cyan-300 transition-all duration-300"
+                              className="w-1/2 rounded-t-sm bg-cyan-400/80 group-hover:bg-cyan-300 transition-all duration-300 shadow-[0_0_8px_rgba(34,211,238,0.3)]"
                             />
                             {/* Visitors Bar */}
                             <div
                               style={{ height: `${visitorHeight}%` }}
-                              className="w-1/2 rounded-t-sm bg-indigo-500/80 group-hover:bg-indigo-400 transition-all duration-300"
+                              className="w-1/2 rounded-t-sm bg-indigo-500/80 group-hover:bg-indigo-400 transition-all duration-300 shadow-[0_0_8px_rgba(99,102,241,0.3)]"
                             />
                           </div>
                         </div>

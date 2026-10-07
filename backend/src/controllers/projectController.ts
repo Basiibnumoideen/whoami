@@ -275,6 +275,12 @@ export class ProjectController {
           },
         }));
         await Project.bulkWrite(bulkOps);
+        await AuditLog.create({
+          action: 'UPDATED',
+          target: `Project Showcase Order (${items.length} items)`,
+          author: req.user?.name || req.user?.email || 'Admin',
+          timestamp: new Date().toISOString(),
+        }).catch(() => {});
       } else {
         items.forEach(item => {
           const p = memoryStore.projects.find(p => p._id === item.id);

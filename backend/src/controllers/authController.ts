@@ -132,6 +132,11 @@ export class AuthController {
             target: `Failed login attempt for identifier: ${identifier}`,
             author: clientIp,
             timestamp: new Date().toISOString(),
+            metadata: {
+              ip: clientIp,
+              identifier,
+              userAgent: (req.headers['user-agent'] || '').slice(0, 100),
+            },
           }).catch(() => null);
 
           if (isNowLocked) {
@@ -181,6 +186,12 @@ export class AuthController {
           target: `Admin Logged In (${user.email})`,
           author: user.name || user.email,
           timestamp: new Date().toISOString(),
+          metadata: {
+            ip: clientIp,
+            userAgent: (req.headers['user-agent'] || '').slice(0, 100),
+            email: user.email,
+            role: user.role,
+          },
         }).catch(() => null);
 
         res.status(200).json({
@@ -220,6 +231,18 @@ export class AuthController {
           maxAge: 7 * 24 * 60 * 60 * 1000,
         });
 
+        await AuditLog.create({
+          action: 'LOGIN',
+          target: `Admin Logged In (${envEmail || 'admin'})`,
+          author: 'Portfolio Admin',
+          timestamp: new Date().toISOString(),
+          metadata: {
+            ip: clientIp,
+            userAgent: (req.headers['user-agent'] || '').slice(0, 100),
+            role: 'admin',
+          },
+        }).catch(() => null);
+
         res.status(200).json({
           success: true,
           message: 'Authentication verified.',
@@ -254,11 +277,23 @@ export class AuthController {
    */
   static async logout(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
+      const clientIp = (req.headers['x-forwarded-for'] as string || req.ip || '').split(',')[0].trim();
       res.clearCookie(COOKIE_NAME, {
         httpOnly: true,
         secure: IS_PROD,
         sameSite: IS_PROD ? 'none' : 'lax',
       });
+
+      await AuditLog.create({
+        action: 'LOGOUT',
+        target: `Admin Logged Out (${req.user?.email || 'Admin'})`,
+        author: req.user?.name || req.user?.email || 'Admin',
+        timestamp: new Date().toISOString(),
+        metadata: {
+          ip: clientIp,
+          email: req.user?.email,
+        },
+      }).catch(() => null);
 
       res.status(200).json({
         success: true,
@@ -330,6 +365,12 @@ export class AuthController {
           user.password = newPassword;
           user.forcePasswordChange = false;
           await user.save();
+          await AuditLog.create({
+            action: 'UPDATED',
+            target: `Password Changed for Admin (${user.email})`,
+            author: user.name || user.email,
+            timestamp: new Date().toISOString(),
+          }).catch(() => null);
         }
       }
 
