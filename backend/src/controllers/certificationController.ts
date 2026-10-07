@@ -22,7 +22,7 @@ export class CertificationController {
 
   static async createCertification(req: AuthenticatedRequest, res: Response): Promise<void> {
     try {
-      const { title, provider, issueDate, credentialID, image, verifyURL, order } = req.body;
+      const { title, provider, issueDate, credentialID, image, verifyURL, order, description, skills } = req.body;
       const certData = {
         title: title?.trim(),
         provider: provider?.trim(),
@@ -30,6 +30,8 @@ export class CertificationController {
         credentialID: credentialID?.trim() || '',
         image: image || '',
         verifyURL: verifyURL || '',
+        description: description?.trim() || '',
+        skills: Array.isArray(skills) ? skills : (typeof skills === 'string' ? skills.split(',').map((s: string) => s.trim()).filter(Boolean) : []),
         order: Number(order) || 0,
       };
 

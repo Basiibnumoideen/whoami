@@ -871,6 +871,7 @@ function DashboardContent() {
   const [certFormCredentialID, setCertFormCredentialID] = useState('');
   const [certFormImage, setCertFormImage] = useState('');
   const [certFormVerifyURL, setCertFormVerifyURL] = useState('');
+  const [certFormDescription, setCertFormDescription] = useState('');
   const [isUploadingCertImg, setIsUploadingCertImg] = useState(false);
 
   const openAddCertModal = () => {
@@ -881,6 +882,7 @@ function DashboardContent() {
     setCertFormCredentialID('');
     setCertFormImage('');
     setCertFormVerifyURL('');
+    setCertFormDescription('');
     setIsCertModalOpen(true);
   };
 
@@ -892,6 +894,7 @@ function DashboardContent() {
     setCertFormCredentialID(cert.credentialID || '');
     setCertFormImage(cert.image || '');
     setCertFormVerifyURL(cert.verifyURL || '');
+    setCertFormDescription(cert.description || '');
     setIsCertModalOpen(true);
   };
 
@@ -904,6 +907,7 @@ function DashboardContent() {
       credentialID: certFormCredentialID.trim(),
       image: certFormImage.trim(),
       verifyURL: certFormVerifyURL.trim(),
+      description: certFormDescription.trim(),
     };
 
     if (editingCert) {
@@ -3775,15 +3779,15 @@ function DashboardContent() {
                 />
               </div>
 
-              {/* Cloudinary Certificate Image Upload (Problem 13) */}
+              {/* Cloudinary Certificate Image / PDF Upload */}
               <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">Badge Image (Cloudinary)</label>
+                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">Certificate Document / Badge (Image or PDF)</label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={certFormImage}
                     onChange={(e) => setCertFormImage(e.target.value)}
-                    placeholder="Paste URL or upload"
+                    placeholder="Paste URL or upload image/PDF"
                     className="flex-1 bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
                   />
                   <label className="px-3.5 py-2 rounded-xl bg-surface-elevated border border-border text-xs text-text-secondary hover:text-foreground cursor-pointer flex items-center gap-1.5">
@@ -3791,7 +3795,7 @@ function DashboardContent() {
                     <span>Upload</span>
                     <input
                       type="file"
-                      accept="image/*"
+                      accept="image/*,application/pdf"
                       className="hidden"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
@@ -3814,6 +3818,17 @@ function DashboardContent() {
                   value={certFormVerifyURL}
                   onChange={(e) => setCertFormVerifyURL(e.target.value)}
                   placeholder="https://..."
+                  className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">Description / Key Competencies (Optional)</label>
+                <textarea
+                  rows={2}
+                  value={certFormDescription}
+                  onChange={(e) => setCertFormDescription(e.target.value)}
+                  placeholder="Summary of core domains, architectural competencies, and examination rigor..."
                   className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
                 />
               </div>

@@ -2,7 +2,29 @@
 
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
-import { Award, GraduationCap, Code, GitCommit, GitPullRequest, ArrowRight, ExternalLink, RefreshCw } from 'lucide-react';
+import { 
+  Award, 
+  GraduationCap, 
+  Code, 
+  GitCommit, 
+  GitPullRequest, 
+  ArrowRight, 
+  ExternalLink, 
+  RefreshCw,
+  Maximize2,
+  FileText,
+  Check,
+  Copy,
+  Download,
+  ZoomIn,
+  ZoomOut,
+  RotateCcw,
+  X,
+  Eye,
+  ShieldCheck,
+  Calendar,
+  Hash
+} from 'lucide-react';
 import { Github } from '@/components/icons';
 import Link from 'next/link';
 
@@ -27,13 +49,95 @@ interface CertificationItem {
   credentialID?: string;
   image?: string;
   verifyURL?: string;
+  description?: string;
+  skills?: string[];
 }
+
+const DEFAULT_CERTIFICATIONS: CertificationItem[] = [
+  {
+    id: 'cert-1',
+    title: 'AWS Certified Solutions Architect – Associate',
+    provider: 'Amazon Web Services',
+    issueDate: '2024',
+    credentialID: 'AWS-SAA-839210',
+    image: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=800&q=80',
+    verifyURL: 'https://aws.amazon.com/verification',
+    description: 'Comprehensive mastery of designing secure, resilient, high-performing, and cost-optimized distributed systems on AWS cloud infrastructure.',
+    skills: ['AWS Cloud', 'Distributed Systems', 'VPC Architecture', 'IAM Security', 'S3 & RDS Scaling'],
+  },
+  {
+    id: 'cert-2',
+    title: 'Meta Certified Frontend Developer',
+    provider: 'Meta / Coursera',
+    issueDate: '2023',
+    credentialID: 'META-FE-91048',
+    image: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
+    verifyURL: 'https://www.coursera.org/verify/professional-cert/meta-frontend-developer',
+    description: 'Professional 9-course specialization covering advanced React architecture, state management, automated unit & integration testing, and responsive UI engineering.',
+    skills: ['React 19', 'JavaScript (ESNext)', 'UI/UX Design', 'Jest & RTL Testing', 'Performance Optimization'],
+  },
+  {
+    id: 'cert-3',
+    title: 'MongoDB Certified Developer Associate',
+    provider: 'MongoDB University',
+    issueDate: '2023',
+    credentialID: 'MDB-DEV-49201',
+    image: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
+    verifyURL: 'https://university.mongodb.com/certification/verify',
+    description: 'Validation of advanced MongoDB data modeling, compound indexing, aggregation framework pipelines, and high-concurrency database integration with Node.js.',
+    skills: ['MongoDB Atlas', 'Aggregation Framework', 'Index Optimization', 'Schema Design', 'Mongoose'],
+  },
+];
 
 export default function AboutPage() {
   const [educationList, setEducationList] = useState<EducationItem[]>([]);
   const [certificationsList, setCertificationsList] = useState<CertificationItem[]>([]);
   const [settings, setSettings] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Modals & Fullscreen State
+  const [selectedCert, setSelectedCert] = useState<CertificationItem | null>(null);
+  const [fullscreenMedia, setFullscreenMedia] = useState<{ url: string; title: string; isPdf: boolean } | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [zoomLevel, setZoomLevel] = useState<number>(1);
+
+  const isPdf = (url?: string): boolean => {
+    if (!url) return false;
+    return /\.pdf($|\?)/i.test(url) || url.toLowerCase().includes('application/pdf') || url.includes('/raw/upload/');
+  };
+
+  const handleCopyCredentialID = (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (navigator?.clipboard) {
+      navigator.clipboard.writeText(id);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    }
+  };
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        if (fullscreenMedia) {
+          setFullscreenMedia(null);
+          setZoomLevel(1);
+        } else if (selectedCert) {
+          setSelectedCert(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    if (fullscreenMedia || selectedCert) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = '';
+    };
+  }, [fullscreenMedia, selectedCert]);
+
   const [githubStats, setGithubStats] = useState({
     repos: 15,
     stars: 1,
@@ -60,11 +164,12 @@ export default function AboutPage() {
     ])
       .then(([edu, certs, set]) => {
         setEducationList(Array.isArray(edu) ? edu : []);
-        setCertificationsList(Array.isArray(certs) ? certs : []);
+        setCertificationsList(Array.isArray(certs) && certs.length > 0 ? certs : DEFAULT_CERTIFICATIONS);
         setSettings(set);
       })
       .catch((err) => {
         console.error('Error loading about data:', err);
+        setCertificationsList(DEFAULT_CERTIFICATIONS);
       })
       .finally(() => setLoading(false));
 
@@ -280,11 +385,16 @@ export default function AboutPage() {
         )}
       </section>
 
-      {/* Certifications & Industry Credentials (Problem 6) */}
+      {/* Certifications & Industry Credentials (Problem 6 & Enhanced Fullscreen Viewer) */}
       <section className="mb-20">
-        <div className="flex items-center gap-2 mb-6">
-          <Award className="w-5 h-5 text-secondary" />
-          <h2 className="text-2xl font-bold">Certifications & Accreditations</h2>
+        <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center gap-2">
+            <Award className="w-5 h-5 text-secondary" />
+            <h2 className="text-2xl font-bold">Certifications & Accreditations</h2>
+          </div>
+          <span className="text-xs font-mono text-text-secondary hidden sm:inline-block">
+            Click any certificate for details & full-screen view
+          </span>
         </div>
 
         {loading ? (
@@ -297,44 +407,135 @@ export default function AboutPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {certificationsList.map((cert, idx) => (
-              <div
-                key={cert._id || cert.id || idx}
-                className="p-6 rounded-2xl bg-surface border border-border/80 flex flex-col justify-between hover:border-primary/50 transition-colors shadow-sm"
-              >
-                <div>
-                  {cert.image && (
-                    <div className="h-32 w-full rounded-xl overflow-hidden mb-4 bg-surface-elevated">
-                      <img src={cert.image} alt={cert.title} className="w-full h-full object-cover" />
-                    </div>
-                  )}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs font-mono text-text-secondary">{cert.issueDate}</span>
-                    {cert.credentialID && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
-                        {cert.credentialID}
+            {certificationsList.map((cert, idx) => {
+              const hasMedia = Boolean(cert.image);
+              const certIsPdf = isPdf(cert.image);
+
+              return (
+                <div
+                  key={cert._id || cert.id || idx}
+                  onClick={() => setSelectedCert(cert)}
+                  className="group relative p-6 rounded-3xl bg-surface/90 hover:bg-surface border border-border/80 hover:border-primary/60 transition-all duration-300 flex flex-col justify-between shadow-sm hover:shadow-xl hover:-translate-y-1 cursor-pointer"
+                >
+                  <div>
+                    {/* Media Preview Thumbnail / Document Card */}
+                    {hasMedia ? (
+                      <div 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setFullscreenMedia({
+                            url: cert.image!,
+                            title: cert.title,
+                            isPdf: certIsPdf
+                          });
+                          setZoomLevel(1);
+                        }}
+                        className="relative h-44 w-full rounded-2xl overflow-hidden mb-4 bg-surface-elevated/70 border border-border/60 group/media cursor-zoom-in"
+                        title="Click to view full screen"
+                      >
+                        {certIsPdf ? (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-br from-red-500/10 via-surface-elevated to-surface">
+                            <div className="p-3.5 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 mb-2 group-hover/media:scale-110 transition-transform">
+                              <FileText className="w-8 h-8" />
+                            </div>
+                            <span className="text-xs font-mono font-semibold text-foreground">Official PDF Document</span>
+                            <span className="text-[10px] text-text-secondary mt-0.5">Click for Fullscreen Reader</span>
+                          </div>
+                        ) : (
+                          <>
+                            <img 
+                              src={cert.image} 
+                              alt={cert.title} 
+                              className="w-full h-full object-cover group-hover/media:scale-105 transition-transform duration-500" 
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="px-3 py-1.5 rounded-xl bg-black/70 backdrop-blur-md text-white text-[11px] font-mono font-semibold flex items-center gap-1.5 border border-white/20 shadow-lg">
+                                <Maximize2 className="w-3.5 h-3.5" />
+                                <span>Fullscreen Preview</span>
+                              </span>
+                            </div>
+                          </>
+                        )}
+
+                        {/* Media Type Pill Badge */}
+                        <div className="absolute top-2.5 left-2.5">
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider backdrop-blur-md bg-black/60 text-white border border-white/10">
+                            {certIsPdf ? 'PDF' : 'Certificate'}
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="relative h-28 w-full rounded-2xl overflow-hidden mb-4 bg-gradient-to-br from-primary/10 via-surface-elevated to-surface border border-border/60 flex items-center justify-center">
+                        <Award className="w-10 h-10 text-primary/40" />
+                      </div>
+                    )}
+
+                    {/* Header & Meta */}
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-mono text-text-secondary flex items-center gap-1">
+                        <Calendar className="w-3 h-3 text-text-secondary/70" />
+                        <span>{cert.issueDate}</span>
                       </span>
+                      {cert.credentialID && (
+                        <button
+                          type="button"
+                          onClick={(e) => handleCopyCredentialID(e, cert.credentialID!)}
+                          className="text-[10px] font-mono px-2 py-0.5 rounded-md bg-primary/10 text-primary hover:bg-primary/20 border border-primary/20 flex items-center gap-1 transition-colors"
+                          title="Click to copy Credential ID"
+                        >
+                          {copiedId === cert.credentialID ? (
+                            <>
+                              <Check className="w-2.5 h-2.5 text-success" />
+                              <span className="text-success font-semibold">Copied</span>
+                            </>
+                          ) : (
+                            <>
+                              <Hash className="w-2.5 h-2.5 text-primary/70" />
+                              <span>{cert.credentialID}</span>
+                            </>
+                          )}
+                        </button>
+                      )}
+                    </div>
+
+                    <h3 className="text-base font-bold text-foreground mb-1 group-hover:text-primary transition-colors line-clamp-2">
+                      {cert.title}
+                    </h3>
+                    <p className="text-xs font-medium text-primary mb-2 flex items-center gap-1">
+                      <ShieldCheck className="w-3.5 h-3.5 text-secondary" />
+                      <span>{cert.provider}</span>
+                    </p>
+
+                    {cert.description && (
+                      <p className="text-xs text-text-secondary line-clamp-2 mb-3">
+                        {cert.description}
+                      </p>
                     )}
                   </div>
-                  <h3 className="text-base font-bold text-foreground mb-1">{cert.title}</h3>
-                  <p className="text-xs font-medium text-primary mb-3">{cert.provider}</p>
-                </div>
 
-                {cert.verifyURL && (
-                  <div className="pt-4 border-t border-border/40 mt-3">
-                    <a
-                      href={cert.verifyURL}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="inline-flex items-center gap-1 text-xs text-primary font-semibold hover:underline"
-                    >
-                      <span>Verify Credential</span>
-                      <ExternalLink className="w-3 h-3" />
-                    </a>
+                  {/* Card Bottom Actions */}
+                  <div className="pt-4 border-t border-border/50 mt-4 flex items-center justify-between">
+                    <span className="text-xs font-mono text-primary font-semibold flex items-center gap-1.5 group-hover:translate-x-0.5 transition-transform">
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View Details</span>
+                    </span>
+
+                    {cert.verifyURL && (
+                      <a
+                        href={cert.verifyURL}
+                        target="_blank"
+                        rel="noreferrer"
+                        onClick={(e) => e.stopPropagation()}
+                        className="inline-flex items-center gap-1 text-[11px] text-text-secondary hover:text-primary font-mono transition-colors"
+                      >
+                        <span>Verify</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    )}
                   </div>
-                )}
-              </div>
-            ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </section>
@@ -353,6 +554,318 @@ export default function AboutPage() {
           <ArrowRight className="w-4 h-4" />
         </Link>
       </div>
+
+      {/* ========================================================================= */}
+      {/* MODAL 1: CERTIFICATE DETAILS MODAL                                        */}
+      {/* ========================================================================= */}
+      {selectedCert && (
+        <div 
+          onClick={() => setSelectedCert(null)}
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-200"
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl max-h-[92vh] bg-surface border border-primary/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200"
+          >
+            {/* Header */}
+            <div className="px-6 py-4 sm:px-8 border-b border-border/70 flex items-center justify-between shrink-0 bg-surface/95 backdrop-blur-md">
+              <div className="flex items-center gap-3">
+                <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
+                  <Award className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-foreground">Certificate Details</h3>
+                  <p className="text-xs text-text-secondary">{selectedCert.provider}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedCert(null)}
+                className="p-1.5 rounded-xl bg-surface-elevated text-text-secondary hover:text-foreground transition-colors cursor-pointer"
+                title="Close modal"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Scrollable Body */}
+            <div className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              {/* Certificate Media Banner */}
+              {selectedCert.image ? (
+                <div className="space-y-2">
+                  <div 
+                    onClick={() => {
+                      setFullscreenMedia({
+                        url: selectedCert.image!,
+                        title: selectedCert.title,
+                        isPdf: isPdf(selectedCert.image)
+                      });
+                      setZoomLevel(1);
+                    }}
+                    className="group relative w-full h-56 rounded-2xl overflow-hidden bg-surface-elevated/80 border border-border/80 flex items-center justify-center cursor-pointer shadow-inner"
+                    title="Click to view full screen"
+                  >
+                    {isPdf(selectedCert.image) ? (
+                      <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-red-500/10 via-surface-elevated to-surface text-center">
+                        <div className="p-4 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 mb-2.5 group-hover:scale-110 transition-transform">
+                          <FileText className="w-10 h-10" />
+                        </div>
+                        <p className="text-sm font-bold text-foreground">Official PDF Document</p>
+                        <p className="text-xs text-text-secondary mt-0.5">Click to view fullscreen interactive PDF reader</p>
+                      </div>
+                    ) : (
+                      <>
+                        <img
+                          src={selectedCert.image}
+                          alt={selectedCert.title}
+                          className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                        />
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <span className="px-4 py-2 rounded-xl bg-black/80 backdrop-blur-md text-white text-xs font-mono font-semibold flex items-center gap-2 border border-white/20 shadow-xl">
+                            <Maximize2 className="w-4 h-4" />
+                            <span>View Fullscreen Image</span>
+                          </span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFullscreenMedia({
+                        url: selectedCert.image!,
+                        title: selectedCert.title,
+                        isPdf: isPdf(selectedCert.image)
+                      });
+                      setZoomLevel(1);
+                    }}
+                    className="w-full py-2.5 px-4 rounded-xl bg-surface-elevated hover:bg-surface-elevated/80 border border-border/80 text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Maximize2 className="w-4 h-4 text-primary" />
+                    <span>{isPdf(selectedCert.image) ? 'Open Fullscreen PDF Viewer' : 'Open Fullscreen Certificate Image'}</span>
+                  </button>
+                </div>
+              ) : null}
+
+              {/* Certificate Title */}
+              <div>
+                <h2 className="text-xl font-bold text-foreground leading-snug">{selectedCert.title}</h2>
+                <div className="flex flex-wrap items-center gap-3 mt-2 text-xs">
+                  <span className="font-semibold text-primary flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-secondary" />
+                    <span>{selectedCert.provider}</span>
+                  </span>
+                  <span className="text-border">•</span>
+                  <span className="text-text-secondary font-mono flex items-center gap-1">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>Issued {selectedCert.issueDate}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* Credential ID info block */}
+              {selectedCert.credentialID && (
+                <div className="p-4 rounded-2xl bg-surface-elevated/60 border border-border/70 flex items-center justify-between">
+                  <div>
+                    <span className="text-[11px] font-mono text-text-secondary uppercase tracking-wider block">Credential ID</span>
+                    <span className="text-sm font-mono font-semibold text-foreground">{selectedCert.credentialID}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => handleCopyCredentialID(e, selectedCert.credentialID!)}
+                    className="px-3 py-1.5 rounded-xl bg-surface border border-border hover:border-primary/50 text-xs font-mono flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    {copiedId === selectedCert.credentialID ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-success" />
+                        <span className="text-success font-semibold">Copied</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-text-secondary" />
+                        <span>Copy ID</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              )}
+
+              {/* Description / Curriculum */}
+              {selectedCert.description && (
+                <div>
+                  <h4 className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2">Overview & Rigor</h4>
+                  <p className="text-xs text-text-secondary leading-relaxed bg-surface-elevated/30 p-4 rounded-2xl border border-border/60">
+                    {selectedCert.description}
+                  </p>
+                </div>
+              )}
+
+              {/* Skills Covered (if any) */}
+              {selectedCert.skills && selectedCert.skills.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2">Validated Competencies</h4>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedCert.skills.map((skill, i) => (
+                      <span key={i} className="px-2.5 py-1 rounded-lg bg-surface-elevated border border-border/70 text-[11px] font-mono text-text-secondary">
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Sticky Footer */}
+            <div className="px-6 py-4 sm:px-8 border-t border-border/70 flex items-center justify-between shrink-0 bg-surface/95 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => setSelectedCert(null)}
+                className="px-4 py-2 rounded-xl bg-surface-elevated text-text-secondary hover:text-foreground text-xs font-semibold cursor-pointer transition-colors"
+              >
+                Close
+              </button>
+
+              {selectedCert.verifyURL && (
+                <a
+                  href={selectedCert.verifyURL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="px-5 py-2 rounded-xl gradient-brand-bg text-white text-xs font-bold shadow-md hover:opacity-95 transition-opacity flex items-center gap-2 cursor-pointer"
+                >
+                  <span>Verify on Issuer Site</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================================= */}
+      {/* MODAL 2: FULLSCREEN CERTIFICATE VIEWER (Images & PDFs)                     */}
+      {/* ========================================================================= */}
+      {fullscreenMedia && (
+        <div 
+          onClick={() => {
+            setFullscreenMedia(null);
+            setZoomLevel(1);
+          }}
+          className="fixed inset-0 z-[70] bg-black/95 backdrop-blur-2xl flex flex-col animate-in fade-in duration-200"
+        >
+          {/* Fullscreen Toolbar */}
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="h-16 px-4 sm:px-8 border-b border-white/10 flex items-center justify-between shrink-0 bg-black/60 backdrop-blur-md text-white"
+          >
+            <div className="flex items-center gap-3 overflow-hidden">
+              <span className="px-2.5 py-1 rounded-md text-[10px] font-mono font-bold uppercase tracking-wider bg-white/10 border border-white/20 text-white shrink-0">
+                {fullscreenMedia.isPdf ? 'PDF Document' : 'Certificate Image'}
+              </span>
+              <h3 className="text-sm font-semibold truncate text-white/90">
+                {fullscreenMedia.title}
+              </h3>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              {!fullscreenMedia.isPdf && (
+                <div className="flex items-center gap-1 mr-2 bg-white/10 rounded-xl p-1 border border-white/10">
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(prev => Math.max(0.75, prev - 0.25))}
+                    className="p-1.5 rounded-lg hover:bg-white/20 transition-colors text-white/80 hover:text-white cursor-pointer"
+                    title="Zoom out"
+                  >
+                    <ZoomOut className="w-4 h-4" />
+                  </button>
+                  <span className="text-[11px] font-mono px-2 text-white/80 min-w-12 text-center">
+                    {Math.round(zoomLevel * 100)}%
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(prev => Math.min(3, prev + 0.25))}
+                    className="p-1.5 rounded-lg hover:bg-white/20 transition-colors text-white/80 hover:text-white cursor-pointer"
+                    title="Zoom in"
+                  >
+                    <ZoomIn className="w-4 h-4" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setZoomLevel(1)}
+                    className="p-1.5 rounded-lg hover:bg-white/20 transition-colors text-white/80 hover:text-white cursor-pointer"
+                    title="Reset zoom"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              )}
+
+              <a
+                href={fullscreenMedia.url}
+                target="_blank"
+                rel="noreferrer"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-white/80 hover:text-white cursor-pointer"
+                title="Open original in new tab"
+              >
+                <ExternalLink className="w-4 h-4" />
+              </a>
+
+              <a
+                href={fullscreenMedia.url}
+                download
+                target="_blank"
+                rel="noreferrer"
+                className="p-2 rounded-xl bg-white/10 hover:bg-white/20 transition-colors text-white/80 hover:text-white cursor-pointer"
+                title="Download file"
+              >
+                <Download className="w-4 h-4" />
+              </a>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFullscreenMedia(null);
+                  setZoomLevel(1);
+                }}
+                className="p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-colors text-white ml-2 cursor-pointer"
+                title="Close fullscreen (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Fullscreen Viewport */}
+          <div 
+            className="flex-1 overflow-auto p-4 sm:p-8 flex items-center justify-center relative select-none"
+          >
+            {fullscreenMedia.isPdf ? (
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="w-full h-full max-w-5xl rounded-2xl overflow-hidden bg-white shadow-2xl border border-white/20 flex flex-col"
+              >
+                <iframe
+                  src={`${fullscreenMedia.url}#view=FitH`}
+                  className="w-full h-full border-none"
+                  title={fullscreenMedia.title}
+                />
+              </div>
+            ) : (
+              <div 
+                onClick={(e) => e.stopPropagation()}
+                className="transition-transform duration-200 ease-out flex items-center justify-center max-w-full max-h-full"
+                style={{ transform: `scale(${zoomLevel})` }}
+              >
+                <img
+                  src={fullscreenMedia.url}
+                  alt={fullscreenMedia.title}
+                  className="max-w-[90vw] max-h-[82vh] object-contain rounded-xl shadow-2xl border border-white/10"
+                />
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

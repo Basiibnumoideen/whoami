@@ -7,6 +7,8 @@ export interface ICertification extends Document {
   credentialID?: string;
   image?: string;
   verifyURL?: string;
+  description?: string;
+  skills?: string[];
   order: number;
   createdAt: Date;
   updatedAt: Date;
@@ -20,6 +22,8 @@ const CertificationSchema = new Schema<ICertification>(
     credentialID: { type: String, default: '' },
     image: { type: String, default: '' },
     verifyURL: { type: String, default: '' },
+    description: { type: String, default: '' },
+    skills: [{ type: String }],
     order: { type: Number, default: 0 },
   },
   { timestamps: true }
