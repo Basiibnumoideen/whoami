@@ -99,12 +99,18 @@ export function ProjectMediaCarousel({
   }, [isPlaying, isHovered, items.length, interval]);
 
   const goToPrev = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setCurrentIndex(prev => (prev - 1 + items.length) % items.length);
   };
 
   const goToNext = (e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setCurrentIndex(prev => (prev + 1) % items.length);
   };
 
@@ -224,8 +230,12 @@ export function ProjectMediaCarousel({
         <>
           <button
             type="button"
-            onClick={goToPrev}
-            className="absolute left-2.5 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-background/70 hover:bg-background/90 backdrop-blur-md border border-border/50 text-foreground transition-all duration-200 cursor-pointer opacity-0 group-hover:opacity-100 hover:scale-110"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              goToPrev(e);
+            }}
+            className="absolute left-2.5 top-1/2 -translate-y-1/2 z-30 pointer-events-auto p-2 rounded-full bg-background/80 hover:bg-background backdrop-blur-md border border-border/70 text-foreground transition-all duration-200 cursor-pointer opacity-0 group-hover:opacity-100 hover:scale-110 shadow-md"
             aria-label="Previous Slide"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -233,8 +243,12 @@ export function ProjectMediaCarousel({
 
           <button
             type="button"
-            onClick={goToNext}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 z-20 p-2 rounded-full bg-background/70 hover:bg-background/90 backdrop-blur-md border border-border/50 text-foreground transition-all duration-200 cursor-pointer opacity-0 group-hover:opacity-100 hover:scale-110"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              goToNext(e);
+            }}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 z-30 pointer-events-auto p-2 rounded-full bg-background/80 hover:bg-background backdrop-blur-md border border-border/70 text-foreground transition-all duration-200 cursor-pointer opacity-0 group-hover:opacity-100 hover:scale-110 shadow-md"
             aria-label="Next Slide"
           >
             <ChevronRight className="w-4 h-4" />

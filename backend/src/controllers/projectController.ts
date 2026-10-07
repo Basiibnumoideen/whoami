@@ -105,18 +105,23 @@ export class ProjectController {
         keyFeatures,
       } = req.body;
 
-      if (!title || !description) {
-        res.status(400).json({ success: false, message: 'Title and description are required.' });
+      if (!title || !title.trim()) {
+        res.status(400).json({ success: false, message: 'Project title is required.' });
         return;
       }
 
-      let slug = req.body.slug ? slugify(req.body.slug) : slugify(title);
+      const cleanTitle = title.trim();
+      const cleanDesc = (description || '').trim() || cleanTitle;
+      let slug = req.body.slug ? slugify(req.body.slug) : slugify(cleanTitle);
+      if (!slug || slug.trim() === '') {
+        slug = `project-${Date.now().toString().slice(-6)}`;
+      }
 
       const projectData = {
-        title,
+        title: cleanTitle,
         slug,
-        description,
-        category: category || 'Full Stack',
+        description: cleanDesc,
+        category: (category || '').trim() || 'Full Stack',
         tags: Array.isArray(tags) ? tags : [],
         metrics: metrics || '',
         featured: Boolean(featured),
@@ -127,7 +132,7 @@ export class ProjectController {
         result: result || '',
         demoUrl: demoUrl || '',
         githubUrl: githubUrl || '',
-        image: image || req.body.thumbnailImage || '',
+        image: image || req.body.thumbnailImage || 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1200&q=80',
         thumbnailImage: req.body.thumbnailImage || image || '',
         videoUrl: req.body.videoUrl || '',
         images: Array.isArray(req.body.images) ? req.body.images : (image ? [image] : []),

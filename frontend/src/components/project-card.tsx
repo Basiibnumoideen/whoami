@@ -103,7 +103,7 @@ export function ProjectCard({
               autoPlay={project.carouselAutoPlay !== false}
               interval={project.carouselInterval || 4000}
               title={project.title}
-              className="w-full h-full pointer-events-none"
+              className="w-full h-full"
             />
 
             {/* Gradient bottom shadow vignette for smooth blend */}
@@ -256,7 +256,7 @@ export function ProjectCard({
             autoPlay={project.carouselAutoPlay !== false}
             interval={project.carouselInterval || 4000}
             title={project.title}
-            className="w-full h-full pointer-events-none"
+            className="w-full h-full"
           />
 
           {/* Smooth bottom gradient vignette */}

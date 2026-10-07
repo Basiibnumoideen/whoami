@@ -31,7 +31,7 @@ const ProjectSchema = new Schema<IProject>(
   {
     title: { type: String, required: true, trim: true },
     slug: { type: String, required: true, unique: true, lowercase: true, trim: true },
-    description: { type: String, required: true },
+    description: { type: String, default: '' },
     category: { type: String, required: true, default: 'Full Stack' },
     tags: [{ type: String, trim: true }],
     metrics: { type: String, default: '' },

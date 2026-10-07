@@ -13,6 +13,12 @@ const ALLOWED_MIME_TYPES = new Set([
   'image/gif',
   'image/svg+xml',
   'application/pdf',
+  'video/mp4',
+  'video/webm',
+  'video/quicktime',
+  'video/x-msvideo',
+  'video/x-matroska',
+  'video/ogg',
 ]);
 
 const ALLOWED_EXTENSIONS = new Set([
@@ -23,19 +29,25 @@ const ALLOWED_EXTENSIONS = new Set([
   '.gif',
   '.svg',
   '.pdf',
+  '.mp4',
+  '.webm',
+  '.mov',
+  '.avi',
+  '.mkv',
+  '.ogv',
 ]);
 
 export const uploadMiddleware = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB limit
+    fileSize: 50 * 1024 * 1024, // 50MB limit
   },
   fileFilter: (req: any, file: any, cb: any) => {
     const ext = file.originalname.slice(file.originalname.lastIndexOf('.')).toLowerCase();
     if (ALLOWED_MIME_TYPES.has(file.mimetype) && ALLOWED_EXTENSIONS.has(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only standard images and PDF files are allowed.'));
+      cb(new Error('Invalid file type. Only standard images, videos (MP4/WebM/MOV), and PDF files are allowed.'));
     }
   },
 });
