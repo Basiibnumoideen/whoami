@@ -37,6 +37,11 @@ import {
   Menu,
   AlertCircle,
   Loader2,
+  ChevronDown,
+  ChevronUp,
+  Globe,
+  Image as ImageIcon,
+  Video as VideoIcon,
 } from 'lucide-react';
 import { api, setStoredToken } from '@/lib/api';
 import { AnalyticsOverview } from '@/components/admin/analytics-overview';
@@ -267,12 +272,15 @@ function DashboardContent() {
     try {
       const res = await api.upload.file(file, folder);
       if (res?.data?.url) {
-        showToast('Image uploaded to Cloudinary successfully!');
+        const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|avi|mkv|ogv)$/i.test(file.name);
+        showToast(isVideo ? 'Video uploaded to Cloudinary successfully!' : 'Media uploaded to Cloudinary successfully!');
         return res.data.url;
       }
+      showToast(res?.message || 'Upload failed without URL returned', 'error');
       return null;
     } catch (err: any) {
-      alert('Upload notice: ' + (err?.message || 'Check Cloudinary credentials in .env'));
+      console.error('[Upload to Cloudinary error]:', err);
+      showToast(err?.message || 'Upload failed. Check Cloudinary credentials in .env', 'error');
       return null;
     }
   };
@@ -426,6 +434,11 @@ function DashboardContent() {
   const [isUploadingGalleryImg, setIsUploadingGalleryImg] = useState(false);
   const [isSavingProject, setIsSavingProject] = useState(false);
   const [projFormError, setProjFormError] = useState<string | null>(null);
+  const [coverUploadProgress, setCoverUploadProgress] = useState<string | null>(null);
+  const [showManualCoverUrl, setShowManualCoverUrl] = useState(false);
+  const [showProjLinksSection, setShowProjLinksSection] = useState(false);
+  const [showProjCaseStudySection, setShowProjCaseStudySection] = useState(false);
+  const [showProjGallerySection, setShowProjGallerySection] = useState(false);
 
   const defaultProjCategories = useMemo(
     () => ['Full Stack', 'Frontend', 'Backend', 'AI & Machine Learning', 'Mobile App', 'Cloud & DevOps', 'UI/UX Design', 'Open Source'],
@@ -448,9 +461,40 @@ function DashboardContent() {
     });
   }, [projectsList, selectedProjCategory, projSearch]);
 
+  const handleCoverFileUpload = async (file: File) => {
+    try {
+      const isVideo = file.type.startsWith('video/') || /\.(mp4|webm|mov|avi|mkv|ogv)$/i.test(file.name);
+      setCoverUploadProgress(isVideo ? 'Uploading video to Cloudinary (up to 50MB)...' : 'Uploading image to Cloudinary...');
+      setIsUploadingProjImg(true);
+      const folder = isVideo ? 'project_videos' : 'projects';
+      const url = await uploadToCloudinary(file, folder);
+      if (url) {
+        if (isVideo) {
+          setProjFormVideoUrl(url);
+        } else {
+          setProjFormThumbnailImage(url);
+          setProjFormImage(url);
+        }
+        setCoverUploadProgress('Media uploaded successfully!');
+        setTimeout(() => setCoverUploadProgress(null), 3000);
+      } else {
+        setCoverUploadProgress('Upload failed. Please verify connection.');
+      }
+    } catch (err: any) {
+      setCoverUploadProgress(`Upload error: ${err.message || 'Failed'}`);
+    } finally {
+      setIsUploadingProjImg(false);
+    }
+  };
+
   const openAddProjModal = () => {
     setEditingProject(null);
     setProjFormError(null);
+    setCoverUploadProgress(null);
+    setShowManualCoverUrl(false);
+    setShowProjLinksSection(false);
+    setShowProjCaseStudySection(false);
+    setShowProjGallerySection(false);
     setProjFormTitle('');
     setProjFormDescription('');
     setProjFormCategory('Full Stack');
@@ -478,6 +522,11 @@ function DashboardContent() {
   const openEditProjModal = (p: any) => {
     setEditingProject(p);
     setProjFormError(null);
+    setCoverUploadProgress(null);
+    setShowManualCoverUrl(Boolean(p.image && !p.image.includes('cloudinary')));
+    setShowProjLinksSection(Boolean(p.demoUrl || p.githubUrl || (p.tags && p.tags.length > 0) || p.metrics));
+    setShowProjCaseStudySection(Boolean(p.problem || p.approach || p.result || (p.keyFeatures && p.keyFeatures.length > 0)));
+    setShowProjGallerySection(Boolean((p.images && p.images.length > 1) || (p.videos && p.videos.length > 0) || p.videoUrl));
     setProjFormTitle(p.title || '');
     setProjFormDescription(p.description || '');
     const cat = p.category || 'Full Stack';
@@ -509,8 +558,8 @@ function DashboardContent() {
     setIsProjModalOpen(true);
   };
 
-  const handleSaveProject = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSaveProject = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e?.preventDefault) e.preventDefault();
     setProjFormError(null);
 
     if (!projFormTitle.trim()) {
@@ -2826,33 +2875,48 @@ function DashboardContent() {
       )}
 
       {/* ========================================================================= */}
-      {/* MODAL: ADD / EDIT PROJECT                                                 */}
+      {/* MODAL: ADD / EDIT PROJECT (Redesigned Centered Uploader)                    */}
       {/* ========================================================================= */}
       {isProjModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-md overflow-y-auto">
-          <div className="w-full max-w-xl bg-surface p-6 sm:p-8 rounded-3xl border border-primary/30 shadow-2xl animate-in zoom-in-95 duration-200 my-8">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold">{editingProject ? 'Edit Project' : 'Add New Project'}</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-md">
+          <div className="w-full max-w-2xl max-h-[92vh] bg-surface border border-primary/30 rounded-3xl shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            {/* Sticky Header */}
+            <div className="px-6 py-4 sm:px-8 sm:py-5 border-b border-border/70 flex items-center justify-between shrink-0 bg-surface/95 backdrop-blur-md">
+              <div>
+                <h3 className="text-base sm:text-lg font-bold text-foreground flex items-center gap-2">
+                  <FolderGit2 className="w-5 h-5 text-primary" />
+                  <span>{editingProject ? 'Edit Project' : 'Upload New Project'}</span>
+                </h3>
+                <p className="text-xs text-text-secondary mt-0.5">
+                  {editingProject ? 'Update your project showcase details' : 'Only Title is required — all other fields are optional'}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={() => setIsProjModalOpen(false)}
-                className="p-1 rounded-lg text-text-secondary hover:text-foreground cursor-pointer"
+                className="p-1.5 rounded-xl bg-surface-elevated text-text-secondary hover:text-foreground hover:bg-surface-elevated/80 transition-colors cursor-pointer"
+                title="Close modal"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {projFormError && (
-              <div className="mb-4 p-3 rounded-xl bg-danger/10 border border-danger/30 text-xs text-danger flex items-start gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span className="flex-1">{projFormError}</span>
-              </div>
-            )}
+            {/* Scrollable Body */}
+            <form onSubmit={handleSaveProject} className="flex-1 overflow-y-auto p-6 sm:p-8 space-y-6">
+              {projFormError && (
+                <div className="p-3.5 rounded-2xl bg-danger/10 border border-danger/30 text-xs text-danger flex items-start gap-2.5 animate-in fade-in">
+                  <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                  <div className="flex-1">
+                    <p className="font-semibold">Unable to publish project</p>
+                    <p className="text-[11px] opacity-90 mt-0.5">{projFormError}</p>
+                  </div>
+                </div>
+              )}
 
-            <form onSubmit={handleSaveProject} className="space-y-4">
+              {/* 1. Project Title (Required) */}
               <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                  Project Title <span className="text-primary">*</span>
+                <label className="block text-xs font-mono uppercase tracking-wider text-text-secondary mb-1.5">
+                  Project Title <span className="text-primary font-bold">*</span>
                 </label>
                 <input
                   type="text"
@@ -2860,470 +2924,471 @@ function DashboardContent() {
                   value={projFormTitle}
                   onChange={(e) => setProjFormTitle(e.target.value)}
                   placeholder="e.g. Distributed Telemetry Pipeline"
-                  className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                  className="w-full bg-surface-elevated/70 border border-border/80 focus:border-primary rounded-2xl px-4 py-3 text-sm text-foreground outline-none transition-colors shadow-inner"
+                  autoFocus
                 />
               </div>
 
+              {/* 2. Category Pill Selector (Fast & Modern) */}
               <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-mono uppercase text-text-secondary">Category</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-text-secondary">
+                    Category <span className="text-[10px] text-text-secondary/60 font-normal lowercase">(selected: <strong className="text-primary">{projFormIsCustomCat ? (projFormCustomCat || 'Custom') : projFormCategory}</strong>)</span>
+                  </label>
                   <button
                     type="button"
                     onClick={() => {
                       setProjFormIsCustomCat(!projFormIsCustomCat);
-                      if (!projFormIsCustomCat) {
-                        setProjFormCustomCat('');
-                      }
+                      if (!projFormIsCustomCat) setProjFormCustomCat('');
                     }}
                     className="text-[11px] font-mono text-primary hover:underline cursor-pointer flex items-center gap-1"
                   >
-                    {projFormIsCustomCat ? '← Choose from Presets' : '+ Create New Category'}
+                    {projFormIsCustomCat ? '← Use Standard Categories' : '+ Type Custom Category'}
                   </button>
                 </div>
 
                 {!projFormIsCustomCat ? (
-                  <select
-                    value={projFormCategory}
-                    onChange={(e) => {
-                      if (e.target.value === '__CUSTOM__') {
-                        setProjFormIsCustomCat(true);
-                        setProjFormCustomCat('');
-                      } else {
-                        setProjFormCategory(e.target.value);
-                      }
-                    }}
-                    className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  >
-                    {distinctProjCategories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                    <option value="__CUSTOM__">+ Create Custom Category...</option>
-                  </select>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={projFormCustomCat}
-                        onChange={(e) => setProjFormCustomCat(e.target.value)}
-                        placeholder="Type new category (e.g. Full Stack, AI Tools, Mobile App)..."
-                        className="flex-1 bg-surface-elevated/70 border border-primary/50 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                        autoFocus
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (projFormCustomCat.trim()) {
-                            setProjFormCategory(projFormCustomCat.trim());
+                  <div className="flex flex-wrap gap-2">
+                    {distinctProjCategories.map((cat) => {
+                      const isSelected = projFormCategory === cat;
+                      return (
+                        <button
+                          key={cat}
+                          type="button"
+                          onClick={() => {
+                            setProjFormCategory(cat);
                             setProjFormIsCustomCat(false);
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-mono transition-all cursor-pointer ${
+                            isSelected
+                              ? 'gradient-brand-bg text-white font-semibold shadow-md scale-[1.02]'
+                              : 'bg-surface-elevated/80 border border-border/70 text-text-secondary hover:text-foreground hover:bg-surface-elevated'
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="flex gap-2 items-center">
+                    <input
+                      type="text"
+                      value={projFormCustomCat}
+                      onChange={(e) => setProjFormCustomCat(e.target.value)}
+                      placeholder="Type custom category name (e.g. AI Agents, Web3)..."
+                      className="flex-1 bg-surface-elevated/70 border border-primary/50 focus:border-primary rounded-xl px-3.5 py-2 text-xs text-foreground outline-none"
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (projFormCustomCat.trim()) {
+                          setProjFormCategory(projFormCustomCat.trim());
+                          setProjFormIsCustomCat(false);
+                        }
+                      }}
+                      disabled={!projFormCustomCat.trim()}
+                      className="px-3.5 py-2 rounded-xl gradient-brand-bg text-white text-xs font-semibold cursor-pointer disabled:opacity-50 shrink-0"
+                    >
+                      Save Category
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 3. Cover Media (Image / Video) Dropzone */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-mono uppercase tracking-wider text-text-secondary">
+                    Cover Media <span className="text-text-secondary/60 lowercase font-normal">(image or video · optional)</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setShowManualCoverUrl(!showManualCoverUrl)}
+                    className="text-[11px] font-mono text-text-secondary hover:text-foreground hover:underline cursor-pointer"
+                  >
+                    {showManualCoverUrl ? '← Use File Uploader' : '🔗 Paste direct URL instead'}
+                  </button>
+                </div>
+
+                {showManualCoverUrl ? (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={projFormThumbnailImage || projFormImage || projFormVideoUrl}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val.match(/\.(mp4|webm|mov)$/i) || val.includes('youtube.com') || val.includes('vimeo.com')) {
+                          setProjFormVideoUrl(val);
+                        } else {
+                          setProjFormThumbnailImage(val);
+                          setProjFormImage(val);
+                        }
+                      }}
+                      placeholder="Paste image URL (https://res.cloudinary.com/... or https://...)"
+                      className="w-full bg-surface-elevated/70 border border-border/80 focus:border-primary rounded-xl px-3.5 py-2 text-xs text-foreground outline-none"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    {/* Active Cover Preview Card if exists */}
+                    {(projFormThumbnailImage || projFormImage || projFormVideoUrl) ? (
+                      <div className="relative rounded-2xl overflow-hidden border border-border/80 bg-surface-elevated p-3">
+                        <div className="flex items-center justify-between text-xs mb-2">
+                          <span className="text-success font-medium flex items-center gap-1.5 text-[11px]">
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            <span>{projFormVideoUrl ? 'Cover Video Ready' : 'Cover Image Ready'}</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setProjFormThumbnailImage('');
+                              setProjFormImage('');
+                              setProjFormVideoUrl('');
+                              setCoverUploadProgress(null);
+                            }}
+                            className="text-danger hover:underline text-[11px] font-mono cursor-pointer"
+                          >
+                            Remove Media
+                          </button>
+                        </div>
+                        <div className="relative aspect-[16/9] max-h-48 w-full rounded-xl overflow-hidden bg-background/50 flex items-center justify-center border border-border/50">
+                          {projFormVideoUrl ? (
+                            <video src={projFormVideoUrl} controls className="max-h-full max-w-full object-contain" />
+                          ) : (
+                            <img
+                              src={projFormThumbnailImage || projFormImage}
+                              alt="Cover preview"
+                              className="max-h-full max-w-full object-contain drop-shadow-md"
+                            />
+                          )}
+                        </div>
+                      </div>
+                    ) : (
+                      /* Drag & Drop Upload Zone */
+                      <label
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                        }}
+                        onDrop={async (e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (isUploadingProjImg) return;
+                          const file = e.dataTransfer?.files?.[0];
+                          if (file) {
+                            await handleCoverFileUpload(file);
                           }
                         }}
-                        disabled={!projFormCustomCat.trim()}
-                        className="px-3 py-2 rounded-xl bg-primary/20 text-primary border border-primary/40 text-xs font-semibold hover:bg-primary/30 transition-colors disabled:opacity-50 cursor-pointer shrink-0"
+                        className={`group relative rounded-2xl border-2 border-dashed border-border/80 hover:border-primary/60 bg-surface-elevated/40 hover:bg-surface-elevated/70 p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all duration-300 ${
+                          isUploadingProjImg ? 'pointer-events-none opacity-60' : ''
+                        }`}
                       >
-                        Set Category
-                      </button>
-                    </div>
-                    {projFormCustomCat.trim() && (
-                      <div className="flex items-center gap-1.5 text-[11px] text-text-secondary">
-                        <span>New category will be:</span>
-                        <span className="font-semibold text-primary font-mono bg-primary/10 px-2 py-0.5 rounded-md border border-primary/20">
-                          {projFormCustomCat.trim()}
-                        </span>
-                      </div>
+                        <div className="p-3.5 rounded-2xl bg-surface-elevated border border-border/80 text-primary group-hover:scale-110 transition-transform shadow-md mb-2.5">
+                          {isUploadingProjImg ? (
+                            <Loader2 className="w-6 h-6 animate-spin" />
+                          ) : (
+                            <Upload className="w-6 h-6" />
+                          )}
+                        </div>
+                        <p className="text-xs font-semibold text-foreground">
+                          {isUploadingProjImg ? 'Uploading media to Cloudinary...' : 'Click to select or drag & drop cover file'}
+                        </p>
+                        <p className="text-[11px] text-text-secondary mt-1">
+                          PNG, JPG, WebP, GIF, or MP4/WebM video up to 50MB
+                        </p>
+                        {coverUploadProgress && (
+                          <span className="mt-2 text-[11px] font-mono text-primary font-medium animate-pulse">
+                            {coverUploadProgress}
+                          </span>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*,video/*"
+                          disabled={isUploadingProjImg}
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              await handleCoverFileUpload(file);
+                            }
+                          }}
+                        />
+                      </label>
                     )}
                   </div>
                 )}
               </div>
 
+              {/* 4. Short Description (Optional) */}
               <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
+                <label className="block text-xs font-mono uppercase tracking-wider text-text-secondary mb-1.5">
                   Short Description <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
                 </label>
                 <textarea
                   rows={2}
                   value={projFormDescription}
                   onChange={(e) => setProjFormDescription(e.target.value)}
-                  placeholder="Summary of what the project does, key architecture, and impact..."
-                  className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
+                  placeholder="A quick summary of what this project does and the problems it solves..."
+                  className="w-full bg-surface-elevated/70 border border-border/80 focus:border-primary rounded-2xl px-4 py-2.5 text-xs text-foreground outline-none transition-colors"
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* 5. Feature on Homepage Toggle */}
+              <div className="p-3.5 rounded-2xl bg-surface-elevated/50 border border-border/70 flex items-center justify-between">
                 <div>
-                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                    Metric Tag <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={projFormMetrics}
-                    onChange={(e) => setProjFormMetrics(e.target.value)}
-                    placeholder="e.g. 4.2M events/sec, 99.99% Uptime"
-                    className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  />
+                  <p className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-accent" />
+                    <span>Feature on Public Homepage</span>
+                  </p>
+                  <p className="text-[11px] text-text-secondary mt-0.5">
+                    Highlights this project on your homepage showcase grid and bento layout
+                  </p>
                 </div>
-
-                <div>
-                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                    Technologies / Tags <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={projFormTags}
-                    onChange={(e) => setProjFormTags(e.target.value)}
-                    placeholder="Next.js 16, TypeScript, MongoDB, Docker"
-                    className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              {/* Media: Thumbnail / Cover Image */}
-              <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                  Thumbnail / Cover Image <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={projFormThumbnailImage || projFormImage}
-                    onChange={(e) => {
-                      setProjFormThumbnailImage(e.target.value);
-                      setProjFormImage(e.target.value);
-                    }}
-                    placeholder="Paste image URL or click upload"
-                    className="flex-1 bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  />
-                  <label className={`px-4 py-2 rounded-xl bg-surface-elevated border border-border text-xs text-text-secondary hover:text-foreground cursor-pointer flex items-center gap-1.5 shrink-0 transition-opacity ${isUploadingProjImg ? 'opacity-50 pointer-events-none' : ''}`}>
-                    {isUploadingProjImg ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                        <span>Uploading...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Upload Thumb</span>
-                      </>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={isUploadingProjImg}
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setIsUploadingProjImg(true);
-                          const url = await uploadToCloudinary(file, 'projects');
-                          if (url) {
-                            setProjFormThumbnailImage(url);
-                            setProjFormImage(url);
-                          }
-                          setIsUploadingProjImg(false);
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
-
-                {/* Live Container Auto-Adjust Preview for Thumbnail */}
-                {(projFormThumbnailImage || projFormImage) && (
-                  <div className="mt-2.5 p-3 rounded-2xl bg-surface-elevated/50 border border-border/70 space-y-2">
-                    <div className="flex items-center justify-between text-[11px] font-mono">
-                      <span className="text-text-secondary flex items-center gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-                        <span>Cover Preview</span>
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setProjFormThumbnailImage('');
-                          setProjFormImage('');
-                        }}
-                        className="text-danger hover:underline cursor-pointer"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                    <div className="relative aspect-[16/10] max-h-44 w-full rounded-xl overflow-hidden border border-border/80 bg-surface-elevated flex items-center justify-center">
-                      <div
-                        className="absolute inset-0 bg-cover bg-center blur-2xl opacity-40 scale-125 pointer-events-none"
-                        style={{ backgroundImage: `url(${projFormThumbnailImage || projFormImage})` }}
-                      />
-                      <img
-                        src={projFormThumbnailImage || projFormImage}
-                        alt="Uploaded Thumbnail Preview"
-                        className="relative z-10 max-h-full max-w-full w-auto h-auto object-contain drop-shadow-md"
-                      />
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Media: Demo Video URL & Upload */}
-              <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                  Demo Video URL <span className="text-text-secondary/60 lowercase font-normal">(optional - MP4, WebM, YouTube, Vimeo)</span>
-                </label>
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={projFormVideoUrl}
-                    onChange={(e) => setProjFormVideoUrl(e.target.value)}
-                    placeholder="https://... (direct video file or YouTube/Vimeo embed)"
-                    className="flex-1 bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  />
-                  <label className={`px-4 py-2 rounded-xl bg-surface-elevated border border-border text-xs text-text-secondary hover:text-foreground cursor-pointer flex items-center gap-1.5 shrink-0 transition-opacity ${isUploadingProjVideo ? 'opacity-50 pointer-events-none' : ''}`}>
-                    {isUploadingProjVideo ? (
-                      <>
-                        <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-                        <span>Uploading...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3.5 h-3.5" />
-                        <span>Upload Video</span>
-                      </>
-                    )}
-                    <input
-                      type="file"
-                      accept="video/*"
-                      disabled={isUploadingProjVideo}
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setIsUploadingProjVideo(true);
-                          const url = await uploadToCloudinary(file, 'project_videos');
-                          if (url) setProjFormVideoUrl(url);
-                          setIsUploadingProjVideo(false);
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
-              </div>
-
-              {/* Media: Multiple Gallery Images */}
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="block text-xs font-mono uppercase text-text-secondary">
-                    Gallery Images <span className="text-text-secondary/60 lowercase font-normal">(optional - for carousel)</span>
-                  </label>
-                  <label className={`text-[11px] font-mono text-primary hover:underline cursor-pointer flex items-center gap-1 ${isUploadingGalleryImg ? 'opacity-50 pointer-events-none' : ''}`}>
-                    {isUploadingGalleryImg ? (
-                      <>
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        <span>Uploading...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="w-3 h-3" />
-                        <span>+ Upload & Append</span>
-                      </>
-                    )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      disabled={isUploadingGalleryImg}
-                      className="hidden"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          setIsUploadingGalleryImg(true);
-                          const url = await uploadToCloudinary(file, 'projects');
-                          if (url) {
-                            setProjFormImages(prev => prev ? `${prev}\n${url}` : url);
-                          }
-                          setIsUploadingGalleryImg(false);
-                        }
-                      }}
-                    />
-                  </label>
-                </div>
-                <textarea
-                  rows={2}
-                  value={projFormImages}
-                  onChange={(e) => setProjFormImages(e.target.value)}
-                  placeholder="Paste multiple image URLs (one per line or comma-separated)..."
-                  className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary font-mono"
-                />
-
-                {/* Gallery Images Preview Strip */}
-                {projFormImages.trim() && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {projFormImages.split(/[\n,]+/).map((u) => u.trim()).filter(Boolean).map((imgUrl, i) => (
-                      <div key={i} className="relative w-20 h-14 rounded-lg overflow-hidden border border-border bg-surface-elevated flex items-center justify-center group shadow-sm">
-                        <div
-                          className="absolute inset-0 bg-cover bg-center blur-md opacity-40 scale-125"
-                          style={{ backgroundImage: `url(${imgUrl})` }}
-                        />
-                        <img src={imgUrl} alt={`Gallery item ${i + 1}`} className="relative z-10 max-h-full max-w-full object-contain" />
-                        <button
-                          type="button"
-                          onClick={() => {
-                            const updated = projFormImages
-                              .split(/[\n,]+/)
-                              .map(s => s.trim())
-                              .filter(s => s && s !== imgUrl)
-                              .join('\n');
-                            setProjFormImages(updated);
-                          }}
-                          className="absolute top-1 right-1 z-20 p-0.5 rounded-full bg-background/80 text-danger opacity-0 group-hover:opacity-100 transition-opacity"
-                          title="Remove image"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Media: Multiple Gallery Videos */}
-              <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                  Gallery Videos <span className="text-text-secondary/60 lowercase font-normal">(optional - additional URLs, one per line)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={projFormVideos}
-                  onChange={(e) => setProjFormVideos(e.target.value)}
-                  placeholder="Paste additional video URLs (MP4 / YouTube / Vimeo)..."
-                  className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary font-mono"
+                <input
+                  type="checkbox"
+                  checked={projFormFeatured}
+                  onChange={(e) => setProjFormFeatured(e.target.checked)}
+                  className="rounded-lg accent-primary w-5 h-5 cursor-pointer"
                 />
               </div>
 
-              {/* Carousel Configuration */}
-              <div className="p-3.5 rounded-2xl bg-surface-elevated/40 border border-border/60 grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium">
-                  <input
-                    type="checkbox"
-                    checked={projFormCarouselAutoPlay}
-                    onChange={(e) => setProjFormCarouselAutoPlay(e.target.checked)}
-                    className="rounded accent-primary w-4 h-4 cursor-pointer"
-                  />
-                  <span>Automatic Slide Transition (AutoPlay)</span>
-                </label>
-
-                <div>
-                  <label className="block text-[11px] font-mono text-text-secondary mb-1">Slide Interval (ms)</label>
-                  <input
-                    type="number"
-                    min={1500}
-                    step={500}
-                    value={projFormCarouselInterval}
-                    onChange={(e) => setProjFormCarouselInterval(Number(e.target.value) || 4000)}
-                    placeholder="4000"
-                    className="w-full bg-surface-elevated border border-border/60 rounded-xl px-3 py-1.5 text-xs text-foreground outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                    Live Demo URL <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={projFormDemoUrl}
-                    onChange={(e) => setProjFormDemoUrl(e.target.value)}
-                    placeholder="https://your-live-demo.com"
-                    className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                    GitHub Repo URL <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
-                  </label>
-                  <input
-                    type="text"
-                    value={projFormGithubUrl}
-                    onChange={(e) => setProjFormGithubUrl(e.target.value)}
-                    placeholder="https://github.com/..."
-                    className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-medium">
-                  <input
-                    type="checkbox"
-                    checked={projFormFeatured}
-                    onChange={(e) => setProjFormFeatured(e.target.checked)}
-                    className="rounded accent-primary w-4 h-4 cursor-pointer"
-                  />
-                  <span>Feature on Homepage Hero & Top Bento</span>
-                </label>
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                  Problem Statement <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={projFormProblem}
-                  onChange={(e) => setProjFormProblem(e.target.value)}
-                  placeholder="What challenge or architectural bottleneck did this solve?"
-                  className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                  Architectural Approach <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={projFormApproach}
-                  onChange={(e) => setProjFormApproach(e.target.value)}
-                  placeholder="Key technical decisions, frameworks, and architecture used..."
-                  className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-mono uppercase text-text-secondary mb-1">
-                  Measurable Result & Impact <span className="text-text-secondary/60 lowercase font-normal">(optional)</span>
-                </label>
-                <textarea
-                  rows={2}
-                  value={projFormResult}
-                  onChange={(e) => setProjFormResult(e.target.value)}
-                  placeholder="Measurable improvements, latency drops, user growth..."
-                  className="w-full bg-surface-elevated/70 border border-border/70 rounded-xl px-3.5 py-2 text-xs text-foreground outline-none focus:border-primary"
-                />
-              </div>
-
-              <div className="pt-2 flex justify-end gap-2">
+              {/* =================================================================== */}
+              {/* COLLAPSIBLE SECTION 1: LINKS & TAGS (Optional)                      */}
+              {/* =================================================================== */}
+              <div className="rounded-2xl border border-border/70 bg-surface-elevated/30 overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setIsProjModalOpen(false)}
-                  disabled={isSavingProject}
-                  className="px-4 py-2 rounded-xl bg-surface-elevated text-text-secondary text-xs font-semibold hover:text-foreground cursor-pointer disabled:opacity-50"
+                  onClick={() => setShowProjLinksSection(!showProjLinksSection)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-xs font-mono font-semibold text-text-secondary hover:text-foreground cursor-pointer transition-colors"
                 >
-                  Cancel
+                  <span className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-primary" />
+                    <span>Links & Technologies <span className="text-[10px] text-text-secondary/60 lowercase font-normal">(optional)</span></span>
+                  </span>
+                  {showProjLinksSection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
+
+                {showProjLinksSection && (
+                  <div className="p-4 pt-2 border-t border-border/60 space-y-3.5 animate-in fade-in duration-150">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-mono text-text-secondary mb-1">Live Demo URL</label>
+                        <input
+                          type="text"
+                          value={projFormDemoUrl}
+                          onChange={(e) => setProjFormDemoUrl(e.target.value)}
+                          placeholder="https://your-live-app.com"
+                          className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-mono text-text-secondary mb-1">GitHub Repo URL</label>
+                        <input
+                          type="text"
+                          value={projFormGithubUrl}
+                          onChange={(e) => setProjFormGithubUrl(e.target.value)}
+                          placeholder="https://github.com/..."
+                          className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-mono text-text-secondary mb-1">Technologies / Tags (Comma-separated)</label>
+                        <input
+                          type="text"
+                          value={projFormTags}
+                          onChange={(e) => setProjFormTags(e.target.value)}
+                          placeholder="Next.js 16, TypeScript, MongoDB, Tailwind"
+                          className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[11px] font-mono text-text-secondary mb-1">Metric Badge Tag</label>
+                        <input
+                          type="text"
+                          value={projFormMetrics}
+                          onChange={(e) => setProjFormMetrics(e.target.value)}
+                          placeholder="e.g. 4.2M events/sec, 99.9% Uptime"
+                          className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* =================================================================== */}
+              {/* COLLAPSIBLE SECTION 2: CASE STUDY HIGHLIGHTS (Optional)             */}
+              {/* =================================================================== */}
+              <div className="rounded-2xl border border-border/70 bg-surface-elevated/30 overflow-hidden">
                 <button
-                  type="submit"
-                  disabled={isSavingProject || isUploadingProjImg || isUploadingProjVideo || isUploadingGalleryImg}
-                  className="px-5 py-2 rounded-xl gradient-brand-bg text-white text-xs font-bold shadow-md cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                  type="button"
+                  onClick={() => setShowProjCaseStudySection(!showProjCaseStudySection)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-xs font-mono font-semibold text-text-secondary hover:text-foreground cursor-pointer transition-colors"
                 >
-                  {isSavingProject ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Publishing...</span>
-                    </>
-                  ) : (
-                    <span>{editingProject ? 'Save Changes' : 'Create & Publish Project'}</span>
-                  )}
+                  <span className="flex items-center gap-2">
+                    <BookOpen className="w-4 h-4 text-secondary" />
+                    <span>Case Study Highlights <span className="text-[10px] text-text-secondary/60 lowercase font-normal">(optional)</span></span>
+                  </span>
+                  {showProjCaseStudySection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
                 </button>
+
+                {showProjCaseStudySection && (
+                  <div className="p-4 pt-2 border-t border-border/60 space-y-3 animate-in fade-in duration-150">
+                    <div>
+                      <label className="block text-[11px] font-mono text-text-secondary mb-1">Problem Statement</label>
+                      <textarea
+                        rows={2}
+                        value={projFormProblem}
+                        onChange={(e) => setProjFormProblem(e.target.value)}
+                        placeholder="What challenge or architectural bottleneck did this project solve?"
+                        className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-text-secondary mb-1">Architectural Approach</label>
+                      <textarea
+                        rows={2}
+                        value={projFormApproach}
+                        onChange={(e) => setProjFormApproach(e.target.value)}
+                        placeholder="Key technical choices, libraries, and design patterns..."
+                        className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-text-secondary mb-1">Measurable Result & Impact</label>
+                      <textarea
+                        rows={2}
+                        value={projFormResult}
+                        onChange={(e) => setProjFormResult(e.target.value)}
+                        placeholder="Performance boost, latency drop, customer adoption..."
+                        className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-text-secondary mb-1">Key Features (One per line)</label>
+                      <textarea
+                        rows={2}
+                        value={projFormKeyFeatures}
+                        onChange={(e) => setProjFormKeyFeatures(e.target.value)}
+                        placeholder="Zero downtime rolling deploys&#10;End-to-end encrypted sessions&#10;Sub-millisecond Redis caching"
+                        className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none font-mono"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* =================================================================== */}
+              {/* COLLAPSIBLE SECTION 3: CAROUSEL & GALLERY (Optional)                */}
+              {/* =================================================================== */}
+              <div className="rounded-2xl border border-border/70 bg-surface-elevated/30 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowProjGallerySection(!showProjGallerySection)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-xs font-mono font-semibold text-text-secondary hover:text-foreground cursor-pointer transition-colors"
+                >
+                  <span className="flex items-center gap-2">
+                    <ImageIcon className="w-4 h-4 text-accent" />
+                    <span>Gallery & Multi-Slide Carousel <span className="text-[10px] text-text-secondary/60 lowercase font-normal">(optional)</span></span>
+                  </span>
+                  {showProjGallerySection ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+
+                {showProjGallerySection && (
+                  <div className="p-4 pt-2 border-t border-border/60 space-y-3.5 animate-in fade-in duration-150">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label className="block text-[11px] font-mono text-text-secondary">Additional Gallery Images</label>
+                        <label className="text-[11px] font-mono text-primary hover:underline cursor-pointer flex items-center gap-1">
+                          {isUploadingGalleryImg ? <Loader2 className="w-3 h-3 animate-spin" /> : <Upload className="w-3 h-3" />}
+                          <span>{isUploadingGalleryImg ? 'Uploading...' : '+ Upload & Append'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            disabled={isUploadingGalleryImg}
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                setIsUploadingGalleryImg(true);
+                                const url = await uploadToCloudinary(file, 'projects');
+                                if (url) {
+                                  setProjFormImages(prev => prev ? `${prev}\n${url}` : url);
+                                }
+                                setIsUploadingGalleryImg(false);
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
+                      <textarea
+                        rows={2}
+                        value={projFormImages}
+                        onChange={(e) => setProjFormImages(e.target.value)}
+                        placeholder="Paste image URLs (one per line)..."
+                        className="w-full bg-surface border border-border/80 focus:border-primary rounded-xl px-3 py-2 text-xs text-foreground outline-none font-mono"
+                      />
+                    </div>
+
+                    <div className="p-3 rounded-xl bg-surface border border-border/60 flex items-center justify-between">
+                      <label className="flex items-center gap-2 cursor-pointer text-xs font-medium">
+                        <input
+                          type="checkbox"
+                          checked={projFormCarouselAutoPlay}
+                          onChange={(e) => setProjFormCarouselAutoPlay(e.target.checked)}
+                          className="rounded accent-primary w-4 h-4 cursor-pointer"
+                        />
+                        <span>Auto-slide images in preview</span>
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono text-text-secondary">Interval:</span>
+                        <input
+                          type="number"
+                          min={1500}
+                          step={500}
+                          value={projFormCarouselInterval}
+                          onChange={(e) => setProjFormCarouselInterval(Number(e.target.value) || 4000)}
+                          className="w-20 bg-surface-elevated border border-border rounded-lg px-2 py-1 text-xs text-foreground outline-none text-center"
+                        />
+                        <span className="text-[10px] text-text-secondary">ms</span>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </form>
+
+            {/* Sticky Centered Footer */}
+            <div className="px-6 py-4 sm:px-8 border-t border-border/70 flex items-center justify-between shrink-0 bg-surface/95 backdrop-blur-md">
+              <button
+                type="button"
+                onClick={() => setIsProjModalOpen(false)}
+                disabled={isSavingProject}
+                className="px-4 py-2.5 rounded-xl bg-surface-elevated text-text-secondary hover:text-foreground text-xs font-semibold cursor-pointer transition-colors disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleSaveProject}
+                disabled={isSavingProject || isUploadingProjImg || isUploadingProjVideo || isUploadingGalleryImg}
+                className="px-6 py-2.5 rounded-xl gradient-brand-bg text-white text-xs font-bold shadow-lg hover:opacity-95 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50"
+              >
+                {isSavingProject ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Publishing Project...</span>
+                  </>
+                ) : (
+                  <span>{editingProject ? 'Save Changes' : 'Create & Publish Project'}</span>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

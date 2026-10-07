@@ -87,9 +87,10 @@ export class UploadController {
         },
       });
     } catch (error: any) {
+      console.error('[UploadController Error]:', error);
       res.status(500).json({
         success: false,
-        message: 'File upload failed. Please verify the file and try again.',
+        message: error?.message || 'File upload failed. Please verify Cloudinary credentials and file format.',
       });
     }
   }

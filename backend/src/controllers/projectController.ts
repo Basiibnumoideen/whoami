@@ -163,9 +163,13 @@ export class ProjectController {
       // Memory fallback
       const mockProject = { _id: `proj-${Date.now()}`, ...projectData };
       memoryStore.projects.unshift(mockProject);
-      res.status(201).json({ success: true, message: 'Project created.', data: mockProject });
     } catch (error: any) {
-      res.status(500).json({ success: false, message: 'Failed to create project.', error: error.message });
+      console.error('[ProjectController createProject Error]:', error);
+      res.status(500).json({
+        success: false,
+        message: error?.message ? `Failed to create project: ${error.message}` : 'Failed to create project.',
+        error: error?.message,
+      });
     }
   }
 
@@ -206,7 +210,12 @@ export class ProjectController {
       memoryStore.projects[idx] = { ...memoryStore.projects[idx], ...req.body };
       res.status(200).json({ success: true, message: 'Project updated.', data: memoryStore.projects[idx] });
     } catch (error: any) {
-      res.status(500).json({ success: false, message: 'Failed to update project.', error: error.message });
+      console.error('[ProjectController updateProject Error]:', error);
+      res.status(500).json({
+        success: false,
+        message: error?.message ? `Failed to update project: ${error.message}` : 'Failed to update project.',
+        error: error?.message,
+      });
     }
   }
 
