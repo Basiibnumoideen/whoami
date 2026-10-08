@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Search, Sparkles, FolderGit2, Code2, ArrowRight, CornerDownLeft, X } from 'lucide-react';
-import { PROJECTS, SKILLS, AI_KNOWLEDGE_BASE } from '@/lib/data';
+import { api } from '@/lib/api';
 
 interface CommandPaletteProps {
   isOpen: boolean;
@@ -15,6 +15,15 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [aiAnswer, setAiAnswer] = useState<string | null>(null);
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [projectsList, setProjectsList] = useState<any[]>([]);
+  const [skillsList, setSkillsList] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(null);
+
+  useEffect(() => {
+    api.projects.getAll().then(data => setProjectsList(Array.isArray(data) ? data : [])).catch(() => setProjectsList([]));
+    api.skills.getAll().then(data => setSkillsList(Array.isArray(data) ? data : [])).catch(() => setSkillsList([]));
+    api.settings.get().then(s => setSettings(s)).catch(() => {});
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -52,14 +61,14 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
     { title: 'Contact & Resume', path: '/contact', category: 'Pages' },
   ];
 
-  const filteredProjects = PROJECTS.filter(p =>
-    p.title.toLowerCase().includes(query.toLowerCase()) ||
-    p.tags.some(t => t.toLowerCase().includes(query.toLowerCase()))
+  const filteredProjects = projectsList.filter(p =>
+    (p.title || '').toLowerCase().includes(query.toLowerCase()) ||
+    (Array.isArray(p.tags) && p.tags.some((t: string) => t.toLowerCase().includes(query.toLowerCase())))
   );
 
-  const filteredSkills = SKILLS.filter(s =>
-    s.name.toLowerCase().includes(query.toLowerCase()) ||
-    s.category.toLowerCase().includes(query.toLowerCase())
+  const filteredSkills = skillsList.filter(s =>
+    (s.name || '').toLowerCase().includes(query.toLowerCase()) ||
+    (s.category || '').toLowerCase().includes(query.toLowerCase())
   );
 
   const filteredLinks = navLinks.filter(l =>
@@ -76,22 +85,23 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
       let response = '';
 
       if (q.includes('mongo') || q.includes('database')) {
-        response = 'Muhammed Abdul Basith has 3+ years of deep experience with MongoDB Atlas & Mongoose, including aggregation pipelines, compound indexing for 55% query latency reductions, and vector search.';
+        response = 'Muhammed Abdul Basith has 3+ years of deep experience with MongoDB Atlas & Mongoose, including aggregation pipelines, compound indexing for reduced query latency, and vector search.';
       } else if (q.includes('mern') || q.includes('stack') || q.includes('tech')) {
-        response = 'Basi is a specialized MERN Stack engineer mastering React 19, Next.js 16 (App Router & PPR), TypeScript, Node.js 24 LTS, Express.js, and MongoDB Atlas.';
+        response = 'Basi is a specialized MERN Stack engineer mastering React 19, Next.js 16 (App Router & PPR), TypeScript, Node.js, Express.js, and MongoDB Atlas.';
       } else if (q.includes('project') || q.includes('best') || q.includes('work')) {
-        response = 'Key featured projects include "Nexus AI Workspaces" (MERN + Claude Haiku + WebSockets), "PulseCommerce" (-48% load time with Next.js 16 PPR), and "DevFlow Canvas" (node-based visual workflow builder).';
+        if (projectsList.length > 0) {
+          response = `Basi's verified uploaded projects include: ${projectsList.map(p => `"${p.title}"`).join(', ')}. Check them out in the Projects catalog.`;
+        } else {
+          response = 'Explore the Projects catalog for verified case studies, architecture breakdowns, and live demos.';
+        }
       } else if (q.includes('hire') || q.includes('available') || q.includes('job') || q.includes('freelance')) {
-        response = 'Yes! Basi is actively open to Full-time Full Stack Developer roles and high-impact freelance contracts. You can reach out at abdulbasith.dev@gmail.com.';
+        const email = settings?.email || 'abdulbasith.dev@gmail.com';
+        response = `Yes! Basi is actively open to Full-time Full Stack Developer roles and high-impact freelance contracts. You can reach out directly at ${email}.`;
       } else if (q.includes('education') || q.includes('degree')) {
-        response = 'Basi holds a Bachelor of Technology (B.Tech) in Computer Science & Engineering (2020-2024) with First Class with Distinction from APJ Abdul Kalam Technological University.';
+        response = 'Basi holds a Bachelor of Science in Computer Science from University of Calicut and specializes in Agentic MERN Stack engineering.';
       } else {
-        const found = AI_KNOWLEDGE_BASE.find(item =>
-          item.topic.toLowerCase().includes(q) || item.content.toLowerCase().includes(q)
-        );
-        response = found
-          ? found.content
-          : `Muhammed Abdul Basith is a MERN Stack Developer skilled in Next.js 16, Node.js, Express, and MongoDB Atlas. He is based in Kozhikode, India and available for remote roles. For your question "${query}", check out the Projects and Skills pages or connect via the Contact page!`;
+        const email = settings?.email || 'abdulbasith.dev@gmail.com';
+        response = `Muhammed Abdul Basith is a MERN Stack Developer skilled in Next.js 16, Node.js, Express, and MongoDB Atlas. Available for remote roles worldwide. For your question "${query}", check out the Projects and Skills pages or connect via the Contact page!`;
       }
 
       setAiAnswer(response);
@@ -203,12 +213,14 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
             <div>
               <p className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2 px-2">Projects</p>
               <div className="space-y-1">
-                {filteredProjects.slice(0, 4).map(project => (
-                  <button
-                    key={project.id}
-                    onClick={() => navigateTo(`/projects#${project.slug}`)}
-                    className="w-full flex items-center justify-between p-2.5 rounded-lg text-sm text-foreground hover:bg-surface-elevated transition-colors text-left cursor-pointer"
-                  >
+                {filteredProjects.slice(0, 4).map(project => {
+                  const target = project.slug || project._id;
+                  return (
+                    <button
+                      key={project._id || project.slug || project.id}
+                      onClick={() => navigateTo(target ? `/projects/${target}` : '/projects')}
+                      className="w-full flex items-center justify-between p-2.5 rounded-lg text-sm text-foreground hover:bg-surface-elevated transition-colors text-left cursor-pointer"
+                    >
                     <div className="flex items-center gap-2.5">
                       <FolderGit2 className="w-4 h-4 text-primary" />
                       <div>
@@ -220,7 +232,8 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
                       {project.category}
                     </span>
                   </button>
-                ))}
+                );
+              })}
               </div>
             </div>
           )}

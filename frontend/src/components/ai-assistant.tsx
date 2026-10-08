@@ -33,6 +33,8 @@ export function AiAssistant() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
+  const [projectsList, setProjectsList] = useState<any[]>([]);
+
   useEffect(() => {
     try {
       const cached = localStorage.getItem('portfolio_settings');
@@ -42,6 +44,10 @@ export function AiAssistant() {
     api.settings.get().then(data => {
       if (data) setSettings(data);
     }).catch(() => {});
+
+    api.projects.getAll().then(data => {
+      setProjectsList(Array.isArray(data) ? data : []);
+    }).catch(() => setProjectsList([]));
 
     const handleUpdate = (e: any) => {
       if (e.detail) setSettings(e.detail);
@@ -70,15 +76,19 @@ export function AiAssistant() {
     const q = userQuery.toLowerCase();
 
     if (q.includes('mongo') || q.includes('database') || q.includes('mongoose')) {
-      return `Yes, absolutely! MongoDB is one of Basi's core proficiencies (3+ years). He has built production applications utilizing MongoDB Atlas, Mongoose ODM, compound indexing (which achieved 55% query latency reductions), and MongoDB Atlas Vector Search for AI embeddings. You can see this in his projects Nexus AI Workspaces and CloudPulse APM.`;
+      return `Yes, absolutely! MongoDB is one of Basi's core proficiencies (3+ years). He builds production applications utilizing MongoDB Atlas, Mongoose ODM, aggregation framework pipelines, schema indexing for fast query response, and vector search embeddings.`;
     }
 
     if (q.includes('mern') || q.includes('stack') || q.includes('tech') || q.includes('skills')) {
-      return `Basi specializes in the MERN + AI stack:\n• Frontend: Next.js 16 (App Router, Partial Prerendering), React 19, TypeScript, Tailwind CSS v4, Motion, GSAP.\n• Backend: Node.js 24 LTS, Express.js, RESTful microservices, WebSockets.\n• Databases & Cloud: MongoDB Atlas, Mongoose, Redis, Cloudinary, Docker, Vercel.\n• AI: Anthropic Claude API (Haiku 4.5), OpenAI, prompt engineering.`;
+      return `Basi specializes in the MERN + AI stack:\n• Frontend: Next.js 16 (App Router, Partial Prerendering), React 19, TypeScript, Tailwind CSS v4, Motion, GSAP.\n• Backend: Node.js 24 LTS, Express.js, RESTful microservices, WebSockets.\n• Databases & Cloud: MongoDB Atlas, Mongoose, Redis, Cloudinary, Docker, Vercel.\n• AI: Claude API, OpenAI, prompt engineering.`;
     }
 
-    if (q.includes('project') || q.includes('work') || q.includes('portfolio') || q.includes('nexus') || q.includes('pulse')) {
-      return `Basi's top featured projects showcase production-grade architecture:\n1. Nexus AI Workspaces — Collaborative MERN workspace with Claude Haiku AI reviews & WebSockets (62% faster review cycles).\n2. PulseCommerce Enterprise — Headless e-commerce on Next.js 16 PPR + Redis (-48% load time, 99.98% uptime).\n3. DevFlow Canvas — Visual workflow builder with GSAP & Node.js code generation (3x faster CI/CD setup).\n4. Apex Financial Analytics — 60 FPS real-time financial tracking via WebSocket streams.`;
+    if (q.includes('project') || q.includes('work') || q.includes('portfolio')) {
+      if (projectsList.length > 0) {
+        const projListStr = projectsList.map((p, idx) => `${idx + 1}. ${p.title} — ${p.description || 'Production MERN system'}`).join('\n');
+        return `Basi's verified uploaded projects include:\n${projListStr}\n\nExplore the Projects page to view live architectures, live demos, and full details!`;
+      }
+      return `Basi builds high-performance MERN & Next.js applications with resilient distributed backends. Explore the Projects page to view full case studies and live demos.`;
     }
 
     const contactEmail = settings?.email || PERSONAL_INFO.email;
@@ -88,11 +98,11 @@ export function AiAssistant() {
     }
 
     if (q.includes('education') || q.includes('degree') || q.includes('college') || q.includes('university')) {
-      return `Basi graduated with a Bachelor of Technology (B.Tech) in Computer Science & Engineering (2020–2024) with First Class with Distinction from APJ Abdul Kalam Technological University. He was also the winner of the State Level Web Hackathon 2024 and has solved 500+ LeetCode algorithmic problems.`;
+      return `Basi holds a Bachelor of Science in Computer Science from the University of Calicut and completed intensive Agentic MERN Stack development engineering at Entri Elevate.`;
     }
 
     if (q.includes('experience') || q.includes('intern') || q.includes('years')) {
-      return `Basi has 3+ years of intensive software engineering experience. He currently works as an independent contractor shipping custom Next.js/Express web apps, and previously interned as a MERN Stack Engineer at TechVanguard Labs where he optimized backend microservices and reduced frontend bundle sizes by 35%.`;
+      return `Basi has intensive software engineering experience specializing in full-stack MERN, Node.js microservices, Next.js 16, and cloud database architecture.`;
     }
 
     const match = AI_KNOWLEDGE_BASE.find(k => 

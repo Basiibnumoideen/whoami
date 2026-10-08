@@ -36,6 +36,8 @@ const staticOrigins = [
   'http://127.0.0.1:3000',
   'http://localhost:3001',
   'http://localhost:5173',
+  'https://basi.world',
+  'https://www.basi.world',
 ];
 
 const allowedOrigins = Array.from(new Set([...rawClientUrls, ...staticOrigins]));
@@ -53,6 +55,15 @@ app.use(
 
       // Allow if explicit in allowedOrigins
       if (allowedOrigins.includes(cleanOrigin)) {
+        return callback(null, true);
+      }
+
+      // Automatically allow custom domain basi.world and its subdomains
+      if (
+        cleanOrigin === 'https://basi.world' ||
+        cleanOrigin === 'http://basi.world' ||
+        cleanOrigin.endsWith('.basi.world')
+      ) {
         return callback(null, true);
       }
 

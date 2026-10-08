@@ -67,13 +67,14 @@ export class UploadController {
       // Sanitize target folder to alphanumeric and hyphens/underscores to prevent path traversal
       const rawFolder = (req.body.folder as string) || 'uploads';
       const folder = rawFolder.replace(/[^a-zA-Z0-9_\-]/g, '') || 'uploads';
-      const isPdf = req.file.mimetype === 'application/pdf';
-      const resourceType: 'auto' | 'raw' = isPdf ? 'raw' : 'auto';
+      const isPdf = req.file.mimetype === 'application/pdf' || req.file.originalname.toLowerCase().endsWith('.pdf');
+      const resourceType: 'auto' | 'raw' = 'auto';
 
       const result = await CloudinaryService.uploadBuffer(
         req.file.buffer,
         folder,
-        resourceType
+        resourceType,
+        req.file.originalname
       );
 
       const author = req.user?.name || req.user?.email || 'Admin';

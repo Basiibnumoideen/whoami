@@ -1,14 +1,3 @@
-import { 
-  PROJECTS, 
-  SKILLS, 
-  BLOG_POSTS, 
-  SERVICES, 
-  EXPERIENCES, 
-  EDUCATION, 
-  TESTIMONIALS,
-  NOW_DATA, 
-  AI_KNOWLEDGE_BASE 
-} from './data';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
 
@@ -697,17 +686,17 @@ export const api = {
     },
   },
 
-  // Fallback defaults for initial hydration
+  // Fallback defaults for initial hydration (empty collections)
   defaults: {
-    projects: PROJECTS,
-    skills: SKILLS,
-    blogs: BLOG_POSTS,
-    services: SERVICES,
-    experiences: EXPERIENCES,
-    education: EDUCATION,
-    testimonials: TESTIMONIALS,
-    now: NOW_DATA,
-    aiKb: AI_KNOWLEDGE_BASE,
+    projects: [],
+    skills: [],
+    blogs: [],
+    services: [],
+    experiences: [],
+    education: [],
+    testimonials: [],
+    now: null,
+    aiKb: [],
   },
 };
 

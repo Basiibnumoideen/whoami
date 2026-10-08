@@ -215,12 +215,7 @@ export class AnalyticsController {
 
         const topProjects = topProjectsAgg.length > 0
           ? topProjectsAgg.map((p: any) => ({ title: p._id, views: p.count, slug: p.slug }))
-          : [
-              { title: 'Nexus AI Workspaces', views: 92, slug: 'nexus-ai-workspaces' },
-              { title: 'StreamFlow Distributed Pipeline', views: 76, slug: 'streamflow-distributed-pipeline' },
-              { title: 'Pulse Commerce Enterprise', views: 58, slug: 'pulse-commerce-enterprise' },
-              { title: 'OmniCloud Multi-Region Mesh', views: 44, slug: 'omnicloud-control-plane' },
-            ];
+          : [];
 
         // Format Activity Feed
         const activities = (recentActivities || []).map((act: any) => ({
@@ -328,10 +323,7 @@ export class AnalyticsController {
         charts: {
           visitorsLast7Days: fallback30.slice(-7),
           visitorsLast30Days: fallback30,
-          topViewedProjects: [
-            { title: 'Nexus AI Workspaces', views: 88, slug: 'nexus-ai-workspaces' },
-            { title: 'StreamFlow Distributed Pipeline', views: 65, slug: 'streamflow-distributed-pipeline' },
-          ],
+          topViewedProjects: [],
           mostVisitedPages: [
             { path: '/', views: 290 },
             { path: '/projects', views: 180 },

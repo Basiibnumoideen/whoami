@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import { Github } from '@/components/icons';
 import Link from 'next/link';
+import { isPdfDocument, getCertificateThumbnailUrl, getPdfViewerUrl } from '@/lib/certificate-utils';
 
 interface EducationItem {
   _id?: string;
@@ -53,41 +54,6 @@ interface CertificationItem {
   skills?: string[];
 }
 
-const DEFAULT_CERTIFICATIONS: CertificationItem[] = [
-  {
-    id: 'cert-1',
-    title: 'AWS Certified Solutions Architect – Associate',
-    provider: 'Amazon Web Services',
-    issueDate: '2024',
-    credentialID: 'AWS-SAA-839210',
-    image: 'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?auto=format&fit=crop&w=800&q=80',
-    verifyURL: 'https://aws.amazon.com/verification',
-    description: 'Comprehensive mastery of designing secure, resilient, high-performing, and cost-optimized distributed systems on AWS cloud infrastructure.',
-    skills: ['AWS Cloud', 'Distributed Systems', 'VPC Architecture', 'IAM Security', 'S3 & RDS Scaling'],
-  },
-  {
-    id: 'cert-2',
-    title: 'Meta Certified Frontend Developer',
-    provider: 'Meta / Coursera',
-    issueDate: '2023',
-    credentialID: 'META-FE-91048',
-    image: 'https://images.unsplash.com/photo-1633356122544-f134324a6cee?auto=format&fit=crop&w=800&q=80',
-    verifyURL: 'https://www.coursera.org/verify/professional-cert/meta-frontend-developer',
-    description: 'Professional 9-course specialization covering advanced React architecture, state management, automated unit & integration testing, and responsive UI engineering.',
-    skills: ['React 19', 'JavaScript (ESNext)', 'UI/UX Design', 'Jest & RTL Testing', 'Performance Optimization'],
-  },
-  {
-    id: 'cert-3',
-    title: 'MongoDB Certified Developer Associate',
-    provider: 'MongoDB University',
-    issueDate: '2023',
-    credentialID: 'MDB-DEV-49201',
-    image: 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=800&q=80',
-    verifyURL: 'https://university.mongodb.com/certification/verify',
-    description: 'Validation of advanced MongoDB data modeling, compound indexing, aggregation framework pipelines, and high-concurrency database integration with Node.js.',
-    skills: ['MongoDB Atlas', 'Aggregation Framework', 'Index Optimization', 'Schema Design', 'Mongoose'],
-  },
-];
 
 export default function AboutPage() {
   const [educationList, setEducationList] = useState<EducationItem[]>([]);
@@ -98,12 +64,12 @@ export default function AboutPage() {
   // Modals & Fullscreen State
   const [selectedCert, setSelectedCert] = useState<CertificationItem | null>(null);
   const [fullscreenMedia, setFullscreenMedia] = useState<{ url: string; title: string; isPdf: boolean } | null>(null);
+  const [pdfViewerMode, setPdfViewerMode] = useState<'reader' | 'image'>('reader');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [zoomLevel, setZoomLevel] = useState<number>(1);
 
   const isPdf = (url?: string): boolean => {
-    if (!url) return false;
-    return /\.pdf($|\?)/i.test(url) || url.toLowerCase().includes('application/pdf') || url.includes('/raw/upload/');
+    return isPdfDocument(url);
   };
 
   const handleCopyCredentialID = (e: React.MouseEvent, id: string) => {
@@ -158,18 +124,18 @@ export default function AboutPage() {
     } catch {}
 
     Promise.all([
-      api.education.getAll(),
-      api.certifications.getAll(),
-      api.settings.get(),
+      api.education.getAll().catch(() => []),
+      api.certifications.getAll().catch(() => []),
+      api.settings.get().catch(() => null),
     ])
       .then(([edu, certs, set]) => {
         setEducationList(Array.isArray(edu) ? edu : []);
-        setCertificationsList(Array.isArray(certs) && certs.length > 0 ? certs : DEFAULT_CERTIFICATIONS);
-        setSettings(set);
+        setCertificationsList(Array.isArray(certs) ? certs : []);
+        if (set) setSettings(set);
       })
       .catch((err) => {
         console.error('Error loading about data:', err);
-        setCertificationsList(DEFAULT_CERTIFICATIONS);
+        setCertificationsList([]);
       })
       .finally(() => setLoading(false));
 
@@ -410,6 +376,7 @@ export default function AboutPage() {
             {certificationsList.map((cert, idx) => {
               const hasMedia = Boolean(cert.image);
               const certIsPdf = isPdf(cert.image);
+              const pdfThumb = getCertificateThumbnailUrl(cert.image);
 
               return (
                 <div
@@ -433,7 +400,22 @@ export default function AboutPage() {
                         className="relative h-44 w-full rounded-2xl overflow-hidden mb-4 bg-surface-elevated/70 border border-border/60 group/media cursor-zoom-in"
                         title="Click to view full screen"
                       >
-                        {certIsPdf ? (
+                        {/* Display real visual graphic (image or PDF page-1 render) */}
+                        {pdfThumb ? (
+                          <>
+                            <img 
+                              src={pdfThumb} 
+                              alt={cert.title} 
+                              className="w-full h-full object-contain p-2 group-hover/media:scale-105 transition-transform duration-500 bg-black/10" 
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="px-3 py-1.5 rounded-xl bg-black/70 backdrop-blur-md text-white text-[11px] font-mono font-semibold flex items-center gap-1.5 border border-white/20 shadow-lg">
+                                <Maximize2 className="w-3.5 h-3.5" />
+                                <span>Fullscreen Preview</span>
+                              </span>
+                            </div>
+                          </>
+                        ) : certIsPdf ? (
                           <div className="w-full h-full flex flex-col items-center justify-center p-4 bg-gradient-to-br from-red-500/10 via-surface-elevated to-surface">
                             <div className="p-3.5 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 mb-2 group-hover/media:scale-110 transition-transform">
                               <FileText className="w-8 h-8" />
@@ -593,58 +575,99 @@ export default function AboutPage() {
               {/* Certificate Media Banner */}
               {selectedCert.image ? (
                 <div className="space-y-2">
-                  <div 
-                    onClick={() => {
-                      setFullscreenMedia({
-                        url: selectedCert.image!,
-                        title: selectedCert.title,
-                        isPdf: isPdf(selectedCert.image)
-                      });
-                      setZoomLevel(1);
-                    }}
-                    className="group relative w-full h-56 rounded-2xl overflow-hidden bg-surface-elevated/80 border border-border/80 flex items-center justify-center cursor-pointer shadow-inner"
-                    title="Click to view full screen"
-                  >
-                    {isPdf(selectedCert.image) ? (
-                      <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-red-500/10 via-surface-elevated to-surface text-center">
-                        <div className="p-4 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 mb-2.5 group-hover:scale-110 transition-transform">
-                          <FileText className="w-10 h-10" />
-                        </div>
-                        <p className="text-sm font-bold text-foreground">Official PDF Document</p>
-                        <p className="text-xs text-text-secondary mt-0.5">Click to view fullscreen interactive PDF reader</p>
+                  {(() => {
+                    const certIsPdf = isPdf(selectedCert.image);
+                    const pdfThumb = getCertificateThumbnailUrl(selectedCert.image);
+
+                    return (
+                      <div 
+                        onClick={() => {
+                          setFullscreenMedia({
+                            url: selectedCert.image!,
+                            title: selectedCert.title,
+                            isPdf: certIsPdf
+                          });
+                          setZoomLevel(1);
+                        }}
+                        className="group relative w-full h-56 rounded-2xl overflow-hidden bg-surface-elevated/80 border border-border/80 flex items-center justify-center cursor-pointer shadow-inner"
+                        title="Click to view full screen"
+                      >
+                        {pdfThumb ? (
+                          <>
+                            <img
+                              src={pdfThumb}
+                              alt={selectedCert.title}
+                              className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300 bg-black/10"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="px-4 py-2 rounded-xl bg-black/80 backdrop-blur-md text-white text-xs font-mono font-semibold flex items-center gap-2 border border-white/20 shadow-xl">
+                                <Maximize2 className="w-4 h-4" />
+                                <span>{certIsPdf ? 'View Fullscreen PDF Document' : 'View Fullscreen Image'}</span>
+                              </span>
+                            </div>
+                            {certIsPdf && (
+                              <div className="absolute top-3 left-3">
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-mono font-semibold uppercase tracking-wider backdrop-blur-md bg-black/60 text-white border border-white/10">
+                                  PDF Document
+                                </span>
+                              </div>
+                            )}
+                          </>
+                        ) : certIsPdf ? (
+                          <div className="w-full h-full flex flex-col items-center justify-center p-6 bg-gradient-to-br from-red-500/10 via-surface-elevated to-surface text-center">
+                            <div className="p-4 rounded-2xl bg-red-500/15 border border-red-500/30 text-red-400 mb-2.5 group-hover:scale-110 transition-transform">
+                              <FileText className="w-10 h-10" />
+                            </div>
+                            <p className="text-sm font-bold text-foreground">Official PDF Document</p>
+                            <p className="text-xs text-text-secondary mt-0.5">Click to view fullscreen interactive PDF reader</p>
+                          </div>
+                        ) : (
+                          <>
+                            <img
+                              src={selectedCert.image}
+                              alt={selectedCert.title}
+                              className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                              <span className="px-4 py-2 rounded-xl bg-black/80 backdrop-blur-md text-white text-xs font-mono font-semibold flex items-center gap-2 border border-white/20 shadow-xl">
+                                <Maximize2 className="w-4 h-4" />
+                                <span>View Fullscreen Image</span>
+                              </span>
+                            </div>
+                          </>
+                        )}
                       </div>
-                    ) : (
-                      <>
-                        <img
-                          src={selectedCert.image}
-                          alt={selectedCert.title}
-                          className="w-full h-full object-contain p-2 group-hover:scale-105 transition-transform duration-300"
-                        />
-                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                          <span className="px-4 py-2 rounded-xl bg-black/80 backdrop-blur-md text-white text-xs font-mono font-semibold flex items-center gap-2 border border-white/20 shadow-xl">
-                            <Maximize2 className="w-4 h-4" />
-                            <span>View Fullscreen Image</span>
-                          </span>
-                        </div>
-                      </>
+                    );
+                  })()}
+
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFullscreenMedia({
+                          url: selectedCert.image!,
+                          title: selectedCert.title,
+                          isPdf: isPdf(selectedCert.image)
+                        });
+                        setZoomLevel(1);
+                      }}
+                      className="flex-1 py-2.5 px-4 rounded-xl bg-surface-elevated hover:bg-surface-elevated/80 border border-border/80 text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                    >
+                      <Maximize2 className="w-4 h-4 text-primary" />
+                      <span>{isPdf(selectedCert.image) ? 'Open Fullscreen PDF Viewer' : 'Open Fullscreen Certificate Image'}</span>
+                    </button>
+                    {isPdf(selectedCert.image) && (
+                      <a
+                        href={selectedCert.image}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="py-2.5 px-3 rounded-xl bg-surface-elevated hover:bg-surface-elevated/80 border border-border/80 text-xs font-mono text-text-secondary hover:text-foreground flex items-center gap-1.5 transition-colors"
+                        title="Open direct file in new tab"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
                     )}
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFullscreenMedia({
-                        url: selectedCert.image!,
-                        title: selectedCert.title,
-                        isPdf: isPdf(selectedCert.image)
-                      });
-                      setZoomLevel(1);
-                    }}
-                    className="w-full py-2.5 px-4 rounded-xl bg-surface-elevated hover:bg-surface-elevated/80 border border-border/80 text-xs font-mono font-semibold text-foreground flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <Maximize2 className="w-4 h-4 text-primary" />
-                    <span>{isPdf(selectedCert.image) ? 'Open Fullscreen PDF Viewer' : 'Open Fullscreen Certificate Image'}</span>
-                  </button>
                 </div>
               ) : null}
 
@@ -768,7 +791,36 @@ export default function AboutPage() {
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
-              {!fullscreenMedia.isPdf && (
+              {/* PDF Viewer Mode Switch */}
+              {fullscreenMedia.isPdf && (
+                <div className="flex items-center gap-1 bg-white/10 rounded-xl p-1 border border-white/10 mr-1">
+                  <button
+                    type="button"
+                    onClick={() => setPdfViewerMode('reader')}
+                    className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                      pdfViewerMode === 'reader'
+                        ? 'bg-primary text-white shadow-md'
+                        : 'text-white/70 hover:text-white'
+                    }`}
+                  >
+                    PDF Document
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPdfViewerMode('image')}
+                    className={`px-3 py-1 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                      pdfViewerMode === 'image'
+                        ? 'bg-primary text-white shadow-md'
+                        : 'text-white/70 hover:text-white'
+                    }`}
+                  >
+                    High-Res Image
+                  </button>
+                </div>
+              )}
+
+              {/* Zoom Controls (shown for images or when in PDF image mode) */}
+              {(!fullscreenMedia.isPdf || pdfViewerMode === 'image') && (
                 <div className="flex items-center gap-1 mr-2 bg-white/10 rounded-xl p-1 border border-white/10">
                   <button
                     type="button"
@@ -826,6 +878,7 @@ export default function AboutPage() {
                 onClick={() => {
                   setFullscreenMedia(null);
                   setZoomLevel(1);
+                  setPdfViewerMode('reader');
                 }}
                 className="p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-colors text-white ml-2 cursor-pointer"
                 title="Close fullscreen (Esc)"
@@ -842,13 +895,50 @@ export default function AboutPage() {
             {fullscreenMedia.isPdf ? (
               <div 
                 onClick={(e) => e.stopPropagation()}
-                className="w-full h-full max-w-5xl rounded-2xl overflow-hidden bg-white shadow-2xl border border-white/20 flex flex-col"
+                className="w-full h-full max-w-5xl rounded-2xl overflow-hidden bg-surface border border-white/20 flex flex-col shadow-2xl"
               >
-                <iframe
-                  src={`${fullscreenMedia.url}#view=FitH`}
-                  className="w-full h-full border-none"
-                  title={fullscreenMedia.title}
-                />
+                {pdfViewerMode === 'reader' ? (
+                  <div className="w-full h-full flex flex-col bg-white">
+                    <iframe
+                      src={getPdfViewerUrl(fullscreenMedia.url)}
+                      className="w-full flex-1 border-none bg-white"
+                      title={fullscreenMedia.title}
+                    />
+                    <div className="px-4 py-2 bg-surface text-xs text-text-secondary border-t border-border flex flex-col sm:flex-row items-center justify-between gap-2">
+                      <span>Google Docs PDF Viewer Engine</span>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setPdfViewerMode('image')}
+                          className="text-primary hover:underline font-mono text-[11px] cursor-pointer"
+                        >
+                          Switch to High-Res Image View →
+                        </button>
+                        <a
+                          href={fullscreenMedia.url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-primary hover:underline font-mono text-[11px]"
+                        >
+                          Direct PDF Link ↗
+                        </a>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="w-full h-full flex items-center justify-center overflow-auto p-4 bg-black/40">
+                    <div 
+                      className="transition-transform duration-200 ease-out flex items-center justify-center"
+                      style={{ transform: `scale(${zoomLevel})` }}
+                    >
+                      <img
+                        src={getCertificateThumbnailUrl(fullscreenMedia.url) || fullscreenMedia.url}
+                        alt={fullscreenMedia.title}
+                        className="max-w-[85vw] max-h-[75vh] object-contain rounded-xl shadow-2xl border border-white/10"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div 

@@ -31,8 +31,19 @@ const caveat = Caveat({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL('https://basi.world'),
   title: 'Muhammed Abdul Basith (Basi) — Senior MERN & Next.js Engineer',
   description: 'Production-grade full-stack portfolio & architecture platform. Engineered with Next.js 16, React 19, TypeScript, and Claude Haiku.',
+  alternates: {
+    canonical: 'https://basi.world',
+  },
+  openGraph: {
+    title: 'Muhammed Abdul Basith (Basi) — Senior MERN & Next.js Engineer',
+    description: 'Production-grade full-stack portfolio & architecture platform.',
+    url: 'https://basi.world',
+    siteName: 'Basi Portfolio',
+    type: 'website',
+  },
 };
 
 export default function RootLayout({
