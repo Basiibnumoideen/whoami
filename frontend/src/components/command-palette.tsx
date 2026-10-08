@@ -101,7 +101,7 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
         response = 'Basi holds a Bachelor of Science in Computer Science from University of Calicut and specializes in Agentic MERN Stack engineering.';
       } else {
         const email = settings?.email || 'abdulbasith.dev@gmail.com';
-        response = `Muhammed Abdul Basith is a MERN Stack Developer skilled in Next.js 16, Node.js, Express, and MongoDB Atlas. Available for remote roles worldwide. For your question "${query}", check out the Projects and Skills pages or connect via the Contact page!`;
+        response = `Muhammed Abdul Basith is a MERN Stack Developer skilled in Next.js 16, Node.js, Express, and MongoDB Atlas. Available for remote roles worldwide. For your question "${query}", check out the Projects and Skills pages or connect at ${email}!`;
       }
 
       setAiAnswer(response);
@@ -243,17 +243,20 @@ export function CommandPalette({ isOpen, onClose }: CommandPaletteProps) {
             <div>
               <p className="text-xs font-mono uppercase tracking-wider text-text-secondary mb-2 px-2">Skills (Evidence-Linked)</p>
               <div className="flex flex-wrap gap-2 px-2">
-                {filteredSkills.slice(0, 8).map(skill => (
-                  <button
-                    key={skill.name}
-                    onClick={() => navigateTo(`/projects?skill=${encodeURIComponent(skill.name)}`)}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-elevated text-foreground hover:border-primary/50 border border-border/50 transition-colors cursor-pointer"
-                  >
-                    <Code2 className="w-3.5 h-3.5 text-secondary" />
-                    <span>{skill.name}</span>
-                    <span className="text-[10px] text-text-secondary">({skill.projects.length} projects)</span>
-                  </button>
-                ))}
+                {filteredSkills.slice(0, 8).map(skill => {
+                  const projectCount = Array.isArray(skill.projects) ? skill.projects.length : 0;
+                  return (
+                    <button
+                      key={skill.name}
+                      onClick={() => navigateTo(`/projects?skill=${encodeURIComponent(skill.name)}`)}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-surface-elevated text-foreground hover:border-primary/50 border border-border/50 transition-colors cursor-pointer"
+                    >
+                      <Code2 className="w-3.5 h-3.5 text-secondary" />
+                      <span>{skill.name}</span>
+                      <span className="text-[10px] text-text-secondary">({projectCount} projects)</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           )}

@@ -35,17 +35,17 @@ async function runCleanup() {
   });
   console.log(`✓ Deleted ${deletedBlogs.deletedCount} dummy Blog records.`);
 
-  // 3. Dummy seeded Services
+  // 3. Dummy seeded Services (matched by exact title and seeded icon discriminator)
   const deletedServices = await Service.deleteMany({
-    title: { $in: [
-      'Full Stack Architecture & Web Apps',
-      'Backend Systems & API Engineering',
-      'Performance & Architecture Auditing'
-    ] }
+    $or: [
+      { title: 'Full Stack Architecture & Web Apps', icon: 'Layers' },
+      { title: 'Backend Systems & API Engineering', icon: 'Server' },
+      { title: 'Performance & Architecture Auditing', icon: 'Cpu' },
+    ]
   });
   console.log(`✓ Deleted ${deletedServices.deletedCount} dummy Service records.`);
 
-  // 4. Dummy seeded Experience
+  // 4. Dummy seeded Experience (matched by exact role, period, and company)
   const deletedExp = await Experience.deleteMany({
     company: 'CloudScale Technologies',
     role: 'Senior Full Stack & Backend Engineer',
@@ -53,9 +53,14 @@ async function runCleanup() {
   });
   console.log(`✓ Deleted ${deletedExp.deletedCount} dummy Experience records.`);
 
-  // 5. Dummy seeded Testimonials
+  // 5. Dummy seeded Testimonials (matched by exact name and company discriminator)
   const deletedTestimonials = await Testimonial.deleteMany({
-    company: { $in: ['Nexus Scale Labs', 'HyperFlow Systems', 'ApexScale Global', 'Vanguard Systems'] }
+    $or: [
+      { name: 'Sarah Chen', company: 'Nexus Scale Labs' },
+      { name: 'Marcus Vance', company: 'HyperFlow Systems' },
+      { name: 'David Sterling', company: 'ApexScale Global' },
+      { name: 'Elena Rostova', company: 'Vanguard Systems' },
+    ]
   });
   console.log(`✓ Deleted ${deletedTestimonials.deletedCount} dummy Testimonial records.`);
 

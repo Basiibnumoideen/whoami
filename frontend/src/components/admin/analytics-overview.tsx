@@ -70,16 +70,13 @@ export function AnalyticsOverview({ onNavigateTab }: AnalyticsOverviewProps) {
     for (let i = count - 1; i >= 0; i--) {
       const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
       const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      const factor = Math.sin((i + 3) / 2.2);
-      const views = Math.max(16, Math.round(36 + factor * 14 + (i % 3) * 4));
-      const visitors = Math.max(8, Math.round(views * 0.48 + (i % 2) * 2));
       fallback.push({
         date: d.toISOString().split('T')[0],
         label,
-        visitors,
-        pageViews: views,
-        downloads: i % 4 === 0 ? 1 : 0,
-        inquiries: i % 7 === 0 ? 1 : 0,
+        visitors: 0,
+        pageViews: 0,
+        downloads: 0,
+        inquiries: 0,
       });
     }
     return fallback;
@@ -446,9 +443,14 @@ export function AnalyticsOverview({ onNavigateTab }: AnalyticsOverviewProps) {
                         return (
                           <div
                             key={idx}
-                            className="flex-1 h-full flex flex-col justify-end items-center group relative cursor-pointer"
+                            tabIndex={0}
+                            role="group"
+                            aria-label={`${point.label}: ${point.pageViews || 0} page views, ${point.visitors || 0} visitors`}
+                            className="flex-1 h-full flex flex-col justify-end items-center group relative cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-primary rounded-lg"
                             onMouseEnter={() => setHoveredPoint(point)}
                             onMouseLeave={() => setHoveredPoint(null)}
+                            onFocus={() => setHoveredPoint(point)}
+                            onBlur={() => setHoveredPoint(null)}
                           >
                             {/* Hover Vertical Scanline */}
                             {isHovered && (

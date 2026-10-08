@@ -37,12 +37,8 @@ export function getCertificateThumbnailUrl(url?: string | null): string | null {
   // ->   https://res.cloudinary.com/<cloud>/image/upload/pg_1,f_auto,q_auto/v123/file.jpg
   if (trimmed.includes('res.cloudinary.com')) {
     if (trimmed.includes('/raw/upload/')) {
-      // Convert legacy raw uploads to image pipeline with page 1 JPG rasterization
-      let transformed = trimmed.replace('/raw/upload/', '/image/upload/pg_1,f_auto,q_auto/');
-      if (!transformed.toLowerCase().endsWith('.jpg') && !transformed.toLowerCase().endsWith('.png')) {
-        transformed = `${transformed.replace(/\.pdf$/i, '')}.jpg`;
-      }
-      return transformed;
+      // Legacy raw uploads cannot be dynamically transformed through the image pipeline; return null to use the official PDF document card
+      return null;
     }
 
     if (trimmed.includes('/image/upload/')) {
