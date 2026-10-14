@@ -116,10 +116,14 @@ app.get('/', (req: Request, res: Response) => {
 app.use(notFoundHandler);
 app.use(errorHandler);
 
+import { cacheService } from './services/cacheService';
+
 // Database initialization and server startup
 const startServer = async () => {
   await connectDB();
   await seedDatabase();
+  // Pre-warm in-memory cache for all public endpoints to eliminate cold start delays
+  cacheService.prewarm().catch((err) => console.error('[Cache Prewarm Error]:', err));
 
   app.listen(port, () => {
     console.log(`✓ Portfolio CMS Backend running at http://localhost:${port}`);

@@ -18,8 +18,8 @@ interface SkillItem {
 }
 
 export default function SkillsPage() {
-  const [skills, setSkills] = useState<SkillItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [skills, setSkills] = useState<SkillItem[]>(() => api.getCached('skills') || []);
+  const [loading, setLoading] = useState(() => !api.hasCached('skills'));
 
   useEffect(() => {
     // Dynamic MongoDB API Fetch
@@ -29,7 +29,6 @@ export default function SkillsPage() {
       })
       .catch((err) => {
         console.error('Failed to fetch skills from database:', err);
-        setSkills([]);
       })
       .finally(() => setLoading(false));
 

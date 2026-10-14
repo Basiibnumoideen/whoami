@@ -65,63 +65,204 @@ export function setStoredToken(token: string | null) {
   }
 }
 
-async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
-  const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
-  const token = getStoredToken();
+/* ==========================================================================
+   Client-Side High Performance Cache & In-Flight Request Deduplication
+   ========================================================================== */
 
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(options.headers as Record<string, string>),
-  };
+interface CacheEntry<T = any> {
+  data: T;
+  timestamp: number;
+}
 
-  if (token && isTokenValid(token)) {
-    headers['Authorization'] = `Bearer ${token}`;
+const memoryCache = new Map<string, CacheEntry>();
+const inFlightRequests = new Map<string, Promise<any>>();
+const CLIENT_CACHE_TTL = 5 * 60 * 1000; // 5 minutes fresh TTL
+
+function getCacheKey(endpoint: string): string {
+  return endpoint.startsWith('/') ? endpoint.slice(1) : endpoint;
+}
+
+function isCacheable(endpoint: string, options: RequestInit): boolean {
+  const method = (options.method || 'GET').toUpperCase();
+  if (method !== 'GET') return false;
+
+  const ep = endpoint.toLowerCase();
+  // Do NOT cache private admin or mutation endpoints
+  if (
+    ep.includes('/auth/') ||
+    ep.includes('/admin/') ||
+    ep.includes('/messages') ||
+    ep.includes('/upload') ||
+    ep.includes('/analytics/audit-logs')
+  ) {
+    return false;
   }
+  return true;
+}
 
-  if (options.body instanceof FormData) {
-    delete headers['Content-Type'];
+export function getCached<T>(key: string): T | null {
+  const cleanKey = getCacheKey(key);
+  const entry = memoryCache.get(cleanKey);
+  if (entry && Date.now() - entry.timestamp < CLIENT_CACHE_TTL) {
+    return entry.data as T;
   }
-
-  // 45s safety timeout to accommodate Render free tier cold-start wakeups
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-  try {
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      credentials: 'include',
-      signal: options.signal || controller.signal,
-    });
-
-    clearTimeout(timeoutId);
-
-    const data = await response.json().catch(() => ({
-      success: false,
-      message: 'Invalid response from server',
-    }));
-
-    if (!response.ok) {
-      if (response.status === 401) {
-        console.warn(`[API] 401 Unauthorized for ${endpoint}. Clearing token.`);
-        setStoredToken(null);
+  if (typeof window !== 'undefined') {
+    try {
+      const raw = sessionStorage.getItem(`portfolio_cache_${cleanKey}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Date.now() - parsed.timestamp < CLIENT_CACHE_TTL) {
+          memoryCache.set(cleanKey, parsed);
+          return parsed.data as T;
+        }
       }
-      throw new Error(data.message || `Request failed with status ${response.status}`);
+    } catch {}
+  }
+  return null;
+}
+
+export function hasCached(key: string): boolean {
+  return getCached(key) !== null;
+}
+
+export function setCached<T>(key: string, data: T): void {
+  const cleanKey = getCacheKey(key);
+  const entry: CacheEntry<T> = { data, timestamp: Date.now() };
+  memoryCache.set(cleanKey, entry);
+  if (typeof window !== 'undefined') {
+    try {
+      sessionStorage.setItem(`portfolio_cache_${cleanKey}`, JSON.stringify(entry));
+    } catch {}
+  }
+}
+
+export function invalidateCache(namespace?: string): void {
+  if (!namespace) {
+    memoryCache.clear();
+    if (typeof window !== 'undefined') {
+      try {
+        const keysToRemove: string[] = [];
+        for (let i = 0; i < sessionStorage.length; i++) {
+          const k = sessionStorage.key(i);
+          if (k && k.startsWith('portfolio_cache_')) keysToRemove.push(k);
+        }
+        keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+      } catch {}
+    }
+    return;
+  }
+
+  const prefix = namespace.toLowerCase();
+  for (const k of memoryCache.keys()) {
+    if (k.toLowerCase().includes(prefix)) {
+      memoryCache.delete(k);
+    }
+  }
+
+  if (typeof window !== 'undefined') {
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < sessionStorage.length; i++) {
+        const k = sessionStorage.key(i);
+        if (k && k.toLowerCase().includes(prefix)) keysToRemove.push(k);
+      }
+      keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+    } catch {}
+  }
+}
+
+async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  const cacheable = isCacheable(endpoint, options);
+  const cacheKey = getCacheKey(endpoint);
+
+  // 1. Immediate in-memory cache return for public reads
+  if (cacheable) {
+    const cached = getCached<T>(cacheKey);
+    if (cached !== null) {
+      return cached;
     }
 
-    return data;
-  } catch (error: any) {
-    clearTimeout(timeoutId);
-    if (error.name === 'AbortError') {
-      console.error(`[API] Request timed out for: ${endpoint}`);
-      throw new Error(`Request timed out. Render backend may still be waking up. Please retry in a few seconds.`);
+    // 2. In-flight request deduplication: Coalesce concurrent identical calls into one network fetch
+    if (inFlightRequests.has(cacheKey)) {
+      return inFlightRequests.get(cacheKey) as Promise<T>;
     }
-    if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
-      console.error(`[API Network Error] Could not connect to API at: ${url}`, error);
-      throw new Error(`Cannot connect to backend API (${url}). Check if NEXT_PUBLIC_API_URL is configured on Vercel or if the backend is awake.`);
-    }
-    throw error;
   }
+
+  const fetchPromise = (async () => {
+    const url = `${API_BASE}${endpoint.startsWith('/') ? endpoint : `/${endpoint}`}`;
+    const token = getStoredToken();
+
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
+
+    if (token && isTokenValid(token)) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+
+    if (options.body instanceof FormData) {
+      delete headers['Content-Type'];
+    }
+
+    // 45s safety timeout to accommodate Render free tier cold-start wakeups
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    try {
+      const response = await fetch(url, {
+        ...options,
+        headers,
+        credentials: 'include',
+        signal: options.signal || controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      const data = await response.json().catch(() => ({
+        success: false,
+        message: 'Invalid response from server',
+      }));
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.warn(`[API] 401 Unauthorized for ${endpoint}. Clearing token.`);
+          setStoredToken(null);
+        }
+        throw new Error(data.message || `Request failed with status ${response.status}`);
+      }
+
+      // Store in client cache if cacheable
+      if (cacheable && data) {
+        setCached(cacheKey, data);
+      }
+
+      return data as T;
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        console.error(`[API] Request timed out for: ${endpoint}`);
+        throw new Error(`Request timed out. Render backend may still be waking up. Please retry in a few seconds.`);
+      }
+      if (error.message === 'Failed to fetch' || error.name === 'TypeError') {
+        console.error(`[API Network Error] Could not connect to API at: ${url}`, error);
+        throw new Error(
+          `Cannot connect to backend API (${url}). Check if NEXT_PUBLIC_API_URL is configured on Vercel or if the backend is awake.`
+        );
+      }
+      throw error;
+    } finally {
+      if (cacheable) {
+        inFlightRequests.delete(cacheKey);
+      }
+    }
+  })();
+
+  if (cacheable) {
+    inFlightRequests.set(cacheKey, fetchPromise);
+  }
+
+  return fetchPromise;
 }
 
 export const api = {
@@ -193,6 +334,7 @@ export const api = {
     },
 
     create: async (data: any) => {
+      invalidateCache('projects');
       return request<{ success: boolean; data: any; message: string }>('/projects', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -200,6 +342,7 @@ export const api = {
     },
 
     update: async (idOrSlug: string, data: any) => {
+      invalidateCache('projects');
       return request<{ success: boolean; data: any; message: string }>(`/projects/${idOrSlug}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -207,12 +350,14 @@ export const api = {
     },
 
     delete: async (idOrSlug: string) => {
+      invalidateCache('projects');
       return request<{ success: boolean; message: string }>(`/projects/${idOrSlug}`, {
         method: 'DELETE',
       });
     },
 
     reorder: async (items: { id: string; order: number }[]) => {
+      invalidateCache('projects');
       return request<{ success: boolean; message: string }>('/projects/reorder', {
         method: 'PATCH',
         body: JSON.stringify({ items }),
@@ -234,6 +379,7 @@ export const api = {
     },
 
     create: async (data: any) => {
+      invalidateCache('skills');
       return request<{ success: boolean; data: any; message: string }>('/skills', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -241,6 +387,7 @@ export const api = {
     },
 
     update: async (idOrName: string, data: any) => {
+      invalidateCache('skills');
       return request<{ success: boolean; data: any; message: string }>(`/skills/${encodeURIComponent(idOrName)}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -248,12 +395,14 @@ export const api = {
     },
 
     delete: async (idOrName: string) => {
+      invalidateCache('skills');
       return request<{ success: boolean; message: string }>(`/skills/${encodeURIComponent(idOrName)}`, {
         method: 'DELETE',
       });
     },
 
     reorder: async (items: { id: string; order: number }[]) => {
+      invalidateCache('skills');
       return request<{ success: boolean; message: string }>('/skills/reorder', {
         method: 'PATCH',
         body: JSON.stringify({ items }),
@@ -275,6 +424,7 @@ export const api = {
     },
 
     create: async (data: any) => {
+      invalidateCache('services');
       return request<{ success: boolean; data: any; message: string }>('/services', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -282,6 +432,7 @@ export const api = {
     },
 
     update: async (id: string, data: any) => {
+      invalidateCache('services');
       return request<{ success: boolean; data: any; message: string }>(`/services/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -289,6 +440,7 @@ export const api = {
     },
 
     delete: async (id: string) => {
+      invalidateCache('services');
       return request<{ success: boolean; message: string }>(`/services/${id}`, {
         method: 'DELETE',
       });
@@ -308,6 +460,7 @@ export const api = {
     },
 
     create: async (data: any) => {
+      invalidateCache('experiences');
       return request<{ success: boolean; data: any; message: string }>('/experiences', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -315,6 +468,7 @@ export const api = {
     },
 
     update: async (id: string, data: any) => {
+      invalidateCache('experiences');
       return request<{ success: boolean; data: any; message: string }>(`/experiences/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -322,6 +476,7 @@ export const api = {
     },
 
     delete: async (id: string) => {
+      invalidateCache('experiences');
       return request<{ success: boolean; message: string }>(`/experiences/${id}`, {
         method: 'DELETE',
       });
@@ -341,6 +496,7 @@ export const api = {
     },
 
     create: async (data: any) => {
+      invalidateCache('education');
       return request<{ success: boolean; data: any; message: string }>('/education', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -348,6 +504,7 @@ export const api = {
     },
 
     update: async (id: string, data: any) => {
+      invalidateCache('education');
       return request<{ success: boolean; data: any; message: string }>(`/education/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -355,6 +512,7 @@ export const api = {
     },
 
     delete: async (id: string) => {
+      invalidateCache('education');
       return request<{ success: boolean; message: string }>(`/education/${id}`, {
         method: 'DELETE',
       });
@@ -374,6 +532,7 @@ export const api = {
     },
 
     create: async (data: any) => {
+      invalidateCache('certifications');
       return request<{ success: boolean; data: any; message: string }>('/certifications', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -381,6 +540,7 @@ export const api = {
     },
 
     update: async (id: string, data: any) => {
+      invalidateCache('certifications');
       return request<{ success: boolean; data: any; message: string }>(`/certifications/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -388,6 +548,7 @@ export const api = {
     },
 
     delete: async (id: string) => {
+      invalidateCache('certifications');
       return request<{ success: boolean; message: string }>(`/certifications/${id}`, {
         method: 'DELETE',
       });
@@ -407,6 +568,7 @@ export const api = {
     },
 
     create: async (data: any) => {
+      invalidateCache('testimonials');
       return request<{ success: boolean; data: any; message: string }>('/testimonials', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -414,6 +576,7 @@ export const api = {
     },
 
     update: async (id: string, data: any) => {
+      invalidateCache('testimonials');
       return request<{ success: boolean; data: any; message: string }>(`/testimonials/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -421,6 +584,7 @@ export const api = {
     },
 
     delete: async (id: string) => {
+      invalidateCache('testimonials');
       return request<{ success: boolean; message: string }>(`/testimonials/${id}`, {
         method: 'DELETE',
       });
@@ -449,6 +613,7 @@ export const api = {
     },
 
     create: async (data: any) => {
+      invalidateCache('blogs');
       return request<{ success: boolean; data: any; message: string }>('/blogs', {
         method: 'POST',
         body: JSON.stringify(data),
@@ -456,6 +621,7 @@ export const api = {
     },
 
     update: async (idOrSlug: string, data: any) => {
+      invalidateCache('blogs');
       return request<{ success: boolean; data: any; message: string }>(`/blogs/${idOrSlug}`, {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -463,6 +629,7 @@ export const api = {
     },
 
     delete: async (idOrSlug: string) => {
+      invalidateCache('blogs');
       return request<{ success: boolean; message: string }>(`/blogs/${idOrSlug}`, {
         method: 'DELETE',
       });
@@ -551,6 +718,7 @@ export const api = {
     },
 
     update: async (data: any) => {
+      invalidateCache('settings');
       const res = await request<{ success: boolean; data: any; message: string }>('/settings', {
         method: 'PUT',
         body: JSON.stringify(data),
@@ -698,6 +866,17 @@ export const api = {
     now: null,
     aiKb: [],
   },
+
+  // Cache access and invalidation helpers
+  cache: {
+    get: getCached,
+    has: hasCached,
+    set: setCached,
+    invalidate: invalidateCache,
+    clear: () => invalidateCache(),
+  },
+  getCached,
+  hasCached,
 };
 
 export default api;

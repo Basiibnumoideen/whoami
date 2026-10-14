@@ -20,8 +20,8 @@ interface BlogPostItem {
 }
 
 export default function BlogPage() {
-  const [posts, setPosts] = useState<BlogPostItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [posts, setPosts] = useState<BlogPostItem[]>(() => api.getCached('blogs') || []);
+  const [loading, setLoading] = useState(() => !api.hasCached('blogs'));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
@@ -32,7 +32,6 @@ export default function BlogPage() {
       })
       .catch((err) => {
         console.error('Failed to load blog posts:', err);
-        setPosts([]);
       })
       .finally(() => setLoading(false));
 

@@ -56,6 +56,8 @@ const ProjectSchema = new Schema<IProject>(
 );
 
 ProjectSchema.index({ featured: 1, order: 1 });
+ProjectSchema.index({ order: 1, createdAt: -1 });
+ProjectSchema.index({ category: 1, order: 1 });
 
 export const Project = mongoose.models.Project || mongoose.model<IProject>('Project', ProjectSchema);
 export default Project;

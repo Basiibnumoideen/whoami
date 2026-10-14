@@ -4,6 +4,7 @@ import { SiteSettings } from '../models/SiteSettings';
 import { AuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
+import { cacheService } from '../services/cacheService';
 
 export class SettingsController {
   /**
@@ -11,16 +12,23 @@ export class SettingsController {
    */
   static async getSettings(req: Request, res: Response): Promise<void> {
     try {
-      if (mongoose.connection.readyState === 1) {
-        let settings = await SiteSettings.findOne().lean();
-        if (!settings) {
-          settings = await SiteSettings.create(memoryStore.settings);
-        }
-        res.status(200).json({ success: true, data: settings });
-        return;
-      }
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        'settings',
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            let settings = await SiteSettings.findOne().lean();
+            if (!settings) {
+              settings = await SiteSettings.create(memoryStore.settings);
+            }
+            return { success: true, data: settings };
+          }
 
-      res.status(200).json({ success: true, data: memoryStore.settings });
+          return { success: true, data: memoryStore.settings };
+        },
+        10 * 60 * 1000 // 10-minute cache for site settings
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve site settings.' });
     }
@@ -69,11 +77,14 @@ export class SettingsController {
           memoryStore.settings = settings.toObject ? settings.toObject() : { ...settings };
         }
 
+        cacheService.invalidate('settings');
+
         res.status(200).json({ success: true, message: 'Site settings updated successfully.', data: settings });
         return;
       }
 
       memoryStore.settings = { ...memoryStore.settings, ...updateData };
+      cacheService.invalidate('settings');
       res.status(200).json({ success: true, message: 'Site settings updated successfully.', data: memoryStore.settings });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to update site settings.', error: error.message });

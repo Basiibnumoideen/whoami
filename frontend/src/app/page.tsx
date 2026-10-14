@@ -45,13 +45,23 @@ export default function Home() {
   const [copiedEmail, setCopiedEmail] = useState(false);
   const [selectedProjectForModal, setSelectedProjectForModal] = useState<any | null>(null);
 
-  // Dynamic MongoDB state
-  const [projects, setProjects] = useState<any[]>([]);
-  const [skills, setSkills] = useState<any[]>([]);
-  const [services, setServices] = useState<any[]>([]);
-  const [testimonials, setTestimonials] = useState<any[]>([]);
-  const [settings, setSettings] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  // Dynamic MongoDB state with instant cache hydration
+  const [projects, setProjects] = useState<any[]>(() => api.getCached('projects') || []);
+  const [skills, setSkills] = useState<any[]>(() => api.getCached('skills') || []);
+  const [services, setServices] = useState<any[]>(() => (api.getCached<any[]>('services') || []).filter((s: any) => s.status !== 'inactive'));
+  const [testimonials, setTestimonials] = useState<any[]>(() => api.getCached('testimonials') || []);
+  const [settings, setSettings] = useState<any>(() => {
+    const mem = api.getCached('settings');
+    if (mem) return mem;
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('portfolio_settings');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => !api.hasCached('projects') && !api.hasCached('settings'));
 
   // GitHub Stats
   const [gitStats, setGitStats] = useState({

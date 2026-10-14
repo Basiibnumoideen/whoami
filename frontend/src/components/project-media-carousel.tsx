@@ -165,6 +165,7 @@ export function ProjectMediaCarousel({
               muted
               loop
               playsInline
+              preload="metadata"
               className="relative z-10 w-full h-full object-contain p-1"
             />
           )
@@ -173,6 +174,8 @@ export function ProjectMediaCarousel({
             key={currentItem.url}
             src={currentItem.url}
             alt={`${title} - Slide ${currentIndex + 1}`}
+            loading="lazy"
+            decoding="async"
             className="relative z-10 max-h-full max-w-full w-auto h-auto object-contain transition-transform duration-700 group-hover:scale-[1.02] drop-shadow-md"
             onError={(e) => {
               (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=1200&q=80';

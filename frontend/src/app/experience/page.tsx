@@ -22,8 +22,8 @@ interface ExperienceItem {
 }
 
 export default function ExperiencePage() {
-  const [experiences, setExperiences] = useState<ExperienceItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [experiences, setExperiences] = useState<ExperienceItem[]>(() => api.getCached('experiences') || []);
+  const [loading, setLoading] = useState(() => !api.hasCached('experiences'));
 
   useEffect(() => {
     api.experiences.getAll()
@@ -32,7 +32,6 @@ export default function ExperiencePage() {
       })
       .catch((err) => {
         console.error('Failed to fetch experiences:', err);
-        setExperiences([]);
       })
       .finally(() => setLoading(false));
 

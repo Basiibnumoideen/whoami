@@ -5,23 +5,32 @@ import { AuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
 import { getParam } from '../utils/helpers';
+import { cacheService } from '../services/cacheService';
 
 export class ServiceController {
   static async getServices(req: Request, res: Response): Promise<void> {
     try {
       const { all } = req.query;
+      const cacheKey = `services:${all === 'true'}`;
 
-      if (mongoose.connection.readyState === 1) {
-        const query: any = {};
-        if (all !== 'true') query.status = 'active';
-        const services = await Service.find(query).sort({ order: 1 }).lean();
-        res.status(200).json({ success: true, count: services.length, data: services });
-        return;
-      }
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        cacheKey,
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            const query: any = {};
+            if (all !== 'true') query.status = 'active';
+            const services = await Service.find(query).sort({ order: 1 }).lean();
+            return { success: true, count: services.length, data: services };
+          }
 
-      let result = [...memoryStore.services];
-      if (all !== 'true') result = result.filter(s => s.status !== 'inactive');
-      res.status(200).json({ success: true, count: result.length, data: result });
+          let result = [...memoryStore.services];
+          if (all !== 'true') result = result.filter(s => s.status !== 'inactive');
+          return { success: true, count: result.length, data: result };
+        },
+        5 * 60 * 1000
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve services.' });
     }
@@ -50,6 +59,7 @@ export class ServiceController {
       if (mongoose.connection.readyState === 1) {
         const service = new Service(data);
         await service.save();
+        cacheService.invalidate('service');
         await AuditLog.create({
           action: 'CREATED',
           target: `Service: "${service.title}"`,
@@ -62,6 +72,7 @@ export class ServiceController {
 
       const mock = { _id: `srv-${Date.now()}`, ...data };
       memoryStore.services.push(mock);
+      cacheService.invalidate('service');
       res.status(201).json({ success: true, message: 'Service created.', data: mock });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to create service.', error: error.message });
@@ -78,6 +89,7 @@ export class ServiceController {
           res.status(404).json({ success: false, message: 'Service not found.' });
           return;
         }
+        cacheService.invalidate('service');
         await AuditLog.create({
           action: 'UPDATED',
           target: `Service: "${service.title}"`,
@@ -94,6 +106,7 @@ export class ServiceController {
         return;
       }
       memoryStore.services[idx] = { ...memoryStore.services[idx], ...req.body };
+      cacheService.invalidate('service');
       res.status(200).json({ success: true, message: 'Service updated.', data: memoryStore.services[idx] });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to update service.', error: error.message });
@@ -107,6 +120,7 @@ export class ServiceController {
       if (mongoose.connection.readyState === 1) {
         const service = await Service.findByIdAndDelete(id);
         if (service) {
+          cacheService.invalidate('service');
           await AuditLog.create({
             action: 'DELETED',
             target: `Service: "${service.title}"`,
@@ -119,6 +133,7 @@ export class ServiceController {
       }
 
       memoryStore.services = memoryStore.services.filter(s => s._id !== id);
+      cacheService.invalidate('service');
       res.status(200).json({ success: true, message: 'Service deleted.' });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to delete service.', error: error.message });

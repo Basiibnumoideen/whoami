@@ -5,6 +5,7 @@ import { AuditLog } from '../models/AuditLog';
 import { slugify, calculateReadingTime, getParam, isObjectId, sanitizeSearchString } from '../utils/helpers';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
+import { cacheService } from '../services/cacheService';
 
 export class BlogController {
   /**
@@ -13,36 +14,43 @@ export class BlogController {
   static async getBlogs(req: Request, res: Response): Promise<void> {
     try {
       const { category, search, all } = req.query;
+      const cacheKey = `blogs:${category || 'all'}:${search || ''}:${all || 'false'}`;
 
-      if (mongoose.connection.readyState === 1) {
-        const query: any = {};
-        if (all !== 'true') query.published = true;
-        if (category && category !== 'All' && typeof category === 'string') query.category = category;
-        
-        const sanitizedSearch = sanitizeSearchString(search);
-        if (sanitizedSearch) {
-          query.$or = [
-            { title: { $regex: sanitizedSearch, $options: 'i' } },
-            { excerpt: { $regex: sanitizedSearch, $options: 'i' } },
-            { tags: { $regex: sanitizedSearch, $options: 'i' } },
-          ];
+      await cacheService.handleCachedResponse(req, res, cacheKey, async () => {
+        if (mongoose.connection.readyState === 1) {
+          const query: any = {};
+          if (all !== 'true') query.published = true;
+          if (category && category !== 'All' && typeof category === 'string') query.category = category;
+          
+          const sanitizedSearch = sanitizeSearchString(search);
+          if (sanitizedSearch) {
+            query.$or = [
+              { title: { $regex: sanitizedSearch, $options: 'i' } },
+              { excerpt: { $regex: sanitizedSearch, $options: 'i' } },
+              { tags: { $regex: sanitizedSearch, $options: 'i' } },
+            ];
+          }
+
+          // Exclude full content string in list view for performance unless explicitly requested
+          const blogsQuery = Blog.find(query).sort({ createdAt: -1 });
+          if (all !== 'true') {
+            blogsQuery.select('-content');
+          }
+          const blogs = await blogsQuery.lean();
+          return { success: true, count: blogs.length, data: blogs };
         }
 
-        const blogs = await Blog.find(query).sort({ createdAt: -1 }).lean();
-        res.status(200).json({ success: true, count: blogs.length, data: blogs });
-        return;
-      }
+        // Memory Fallback
+        let result = [...memoryStore.blogs];
+        if (all !== 'true') result = result.filter(b => b.published);
+        if (category && category !== 'All') result = result.filter(b => b.category === category);
+        if (search && typeof search === 'string') {
+          const s = search.toLowerCase();
+          result = result.filter(b => b.title.toLowerCase().includes(s) || b.excerpt.toLowerCase().includes(s));
+        }
 
-      // Memory Fallback
-      let result = [...memoryStore.blogs];
-      if (all !== 'true') result = result.filter(b => b.published);
-      if (category && category !== 'All') result = result.filter(b => b.category === category);
-      if (search && typeof search === 'string') {
-        const s = search.toLowerCase();
-        result = result.filter(b => b.title.toLowerCase().includes(s) || b.excerpt.toLowerCase().includes(s));
-      }
-
-      res.status(200).json({ success: true, count: result.length, data: result });
+        return { success: true, count: result.length, data: result };
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve blog posts.' });
     }
@@ -54,30 +62,31 @@ export class BlogController {
   static async getBlog(req: Request, res: Response): Promise<void> {
     try {
       const idOrSlug = getParam(req.params.idOrSlug);
+      const cacheKey = `blog:${idOrSlug}`;
 
-      if (mongoose.connection.readyState === 1) {
-        const conditions: any[] = [{ slug: idOrSlug }];
-        if (isObjectId(idOrSlug)) conditions.push({ _id: idOrSlug });
-        const blog = await Blog.findOneAndUpdate(
-          { $or: conditions },
-          { $inc: { views: 1 } },
-          { new: true }
-        ).lean();
-        if (!blog) {
-          res.status(404).json({ success: false, message: 'Blog post not found.' });
-          return;
+      await cacheService.handleCachedResponse(req, res, cacheKey, async () => {
+        if (mongoose.connection.readyState === 1) {
+          const conditions: any[] = [{ slug: idOrSlug }];
+          if (isObjectId(idOrSlug)) conditions.push({ _id: idOrSlug });
+
+          const blog = await Blog.findOne({ $or: conditions }).lean();
+          if (!blog) {
+            return null;
+          }
+
+          // Asynchronously increment views without blocking response
+          Blog.updateOne({ _id: (blog as any)._id }, { $inc: { views: 1 } }).catch(() => null);
+
+          return { success: true, data: blog };
         }
-        res.status(200).json({ success: true, data: blog });
-        return;
-      }
 
-      const blog = memoryStore.blogs.find(b => b.slug === idOrSlug || b._id === idOrSlug);
-      if (!blog) {
-        res.status(404).json({ success: false, message: 'Blog post not found.' });
-        return;
-      }
-      blog.views = (blog.views || 0) + 1;
-      res.status(200).json({ success: true, data: blog });
+        const blog = memoryStore.blogs.find(b => b.slug === idOrSlug || b._id === idOrSlug);
+        if (!blog) {
+          return null;
+        }
+        blog.views = (blog.views || 0) + 1;
+        return { success: true, data: blog };
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve blog post.' });
     }
@@ -119,6 +128,7 @@ export class BlogController {
         }
         const blog = new Blog(blogData);
         await blog.save();
+        cacheService.invalidate('blog');
         await AuditLog.create({
           action: 'CREATED',
           target: `Blog: "${blog.title}" (${blog.published ? 'Published' : 'Draft'})`,
@@ -132,6 +142,7 @@ export class BlogController {
       // Memory fallback
       const mockBlog = { _id: `blog-${Date.now()}`, ...blogData, views: 0 };
       memoryStore.blogs.unshift(mockBlog);
+      cacheService.invalidate('blog');
       res.status(201).json({ success: true, message: 'Blog created.', data: mockBlog });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to create blog post.', error: error.message });
@@ -156,6 +167,7 @@ export class BlogController {
         Object.assign(blog, req.body);
         if (req.body.content) blog.readingTime = calculateReadingTime(req.body.content);
         await blog.save();
+        cacheService.invalidate('blog');
         await AuditLog.create({
           action: 'UPDATED',
           target: `Blog Post: "${blog.title}"`,
@@ -172,6 +184,7 @@ export class BlogController {
         return;
       }
       memoryStore.blogs[idx] = { ...memoryStore.blogs[idx], ...req.body };
+      cacheService.invalidate('blog');
       res.status(200).json({ success: true, message: 'Blog updated.', data: memoryStore.blogs[idx] });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to update blog post.', error: error.message });
@@ -193,6 +206,7 @@ export class BlogController {
           res.status(404).json({ success: false, message: 'Blog post not found.' });
           return;
         }
+        cacheService.invalidate('blog');
         await AuditLog.create({
           action: 'DELETED',
           target: `Blog Post: "${blog.title}"`,
@@ -209,6 +223,7 @@ export class BlogController {
         res.status(404).json({ success: false, message: 'Blog post not found.' });
         return;
       }
+      cacheService.invalidate('blog');
       res.status(200).json({ success: true, message: 'Blog deleted.' });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to delete blog post.', error: error.message });

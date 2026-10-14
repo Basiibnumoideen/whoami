@@ -21,8 +21,11 @@ interface ServiceItem {
 }
 
 export default function ServicesPage() {
-  const [services, setServices] = useState<ServiceItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [services, setServices] = useState<ServiceItem[]>(() => {
+    const cached = api.getCached<ServiceItem[]>('services');
+    return Array.isArray(cached) ? cached.filter((s: ServiceItem) => s.status !== 'inactive') : [];
+  });
+  const [loading, setLoading] = useState(() => !api.hasCached('services'));
 
   useEffect(() => {
     api.services.getAll()
@@ -35,7 +38,6 @@ export default function ServicesPage() {
       })
       .catch((err) => {
         console.error('Failed to fetch services:', err);
-        setServices([]);
       })
       .finally(() => setLoading(false));
 

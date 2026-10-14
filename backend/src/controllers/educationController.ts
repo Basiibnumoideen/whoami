@@ -5,16 +5,24 @@ import { recordAuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
 import { getParam } from '../utils/helpers';
+import { cacheService } from '../services/cacheService';
 
 export class EducationController {
   static async getEducation(req: Request, res: Response): Promise<void> {
     try {
-      if (mongoose.connection.readyState === 1) {
-        const edu = await Education.find().sort({ order: 1 }).lean();
-        res.status(200).json({ success: true, count: edu.length, data: edu });
-        return;
-      }
-      res.status(200).json({ success: true, count: memoryStore.education.length, data: memoryStore.education });
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        'education',
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            const edu = await Education.find().sort({ order: 1 }).lean();
+            return { success: true, count: edu.length, data: edu };
+          }
+          return { success: true, count: memoryStore.education.length, data: memoryStore.education };
+        },
+        5 * 60 * 1000
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve education.' });
     }
@@ -44,6 +52,7 @@ export class EducationController {
       if (mongoose.connection.readyState === 1) {
         const item = new Education(data);
         await item.save();
+        cacheService.invalidate('education');
         await recordAuditLog('CREATED', `Education: "${item.degree} at ${item.school}"`, author, {
           degree: item.degree,
           school: item.school,
@@ -55,6 +64,7 @@ export class EducationController {
 
       const mock = { _id: `edu-${Date.now()}`, ...data };
       memoryStore.education.push(mock);
+      cacheService.invalidate('education');
       await recordAuditLog('CREATED', `Education: "${mock.degree} at ${mock.school}"`, author, {
         degree: mock.degree,
         school: mock.school,
@@ -77,6 +87,7 @@ export class EducationController {
           res.status(404).json({ success: false, message: 'Education not found.' });
           return;
         }
+        cacheService.invalidate('education');
         await recordAuditLog('UPDATED', `Education: "${item.degree} at ${item.school}"`, author, {
           degree: item.degree,
           school: item.school,
@@ -92,6 +103,7 @@ export class EducationController {
         return;
       }
       memoryStore.education[idx] = { ...memoryStore.education[idx], ...req.body };
+      cacheService.invalidate('education');
       await recordAuditLog('UPDATED', `Education: "${memoryStore.education[idx].degree} at ${memoryStore.education[idx].school}"`, author, {
         id,
       });
@@ -109,6 +121,7 @@ export class EducationController {
       if (mongoose.connection.readyState === 1) {
         const item = await Education.findByIdAndDelete(id);
         const label = item ? `${item.degree} at ${item.school}` : id;
+        cacheService.invalidate('education');
         await recordAuditLog('DELETED', `Education: "${label}"`, author, { id });
         res.status(200).json({ success: true, message: 'Education deleted.' });
         return;
@@ -117,6 +130,7 @@ export class EducationController {
       const item = memoryStore.education.find(e => e._id === id);
       const label = item ? `${item.degree} at ${item.school}` : id;
       memoryStore.education = memoryStore.education.filter(e => e._id !== id);
+      cacheService.invalidate('education');
       await recordAuditLog('DELETED', `Education: "${label}"`, author, { id });
       res.status(200).json({ success: true, message: 'Education deleted.' });
     } catch (error: any) {

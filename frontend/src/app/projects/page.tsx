@@ -39,8 +39,8 @@ function ProjectsContent() {
   const searchParams = useSearchParams();
   const initialSkill = searchParams.get('skill');
 
-  const [projects, setProjects] = useState<ProjectItem[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [projects, setProjects] = useState<ProjectItem[]>(() => api.getCached('projects') || []);
+  const [loading, setLoading] = useState(() => !api.hasCached('projects'));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [manualSkillFilter, setManualSkillFilter] = useState<string | null>(null);
@@ -54,7 +54,6 @@ function ProjectsContent() {
       })
       .catch((err) => {
         console.error('Failed to fetch projects from database:', err);
-        setProjects([]);
       })
       .finally(() => setLoading(false));
 

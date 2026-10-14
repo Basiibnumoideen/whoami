@@ -5,16 +5,24 @@ import { recordAuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
 import { getParam } from '../utils/helpers';
+import { cacheService } from '../services/cacheService';
 
 export class CertificationController {
   static async getCertifications(req: Request, res: Response): Promise<void> {
     try {
-      if (mongoose.connection.readyState === 1) {
-        const certs = await Certification.find().sort({ order: 1 }).lean();
-        res.status(200).json({ success: true, count: certs.length, data: certs });
-        return;
-      }
-      res.status(200).json({ success: true, count: memoryStore.certifications.length, data: memoryStore.certifications });
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        'certifications',
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            const certs = await Certification.find().sort({ order: 1 }).lean();
+            return { success: true, count: certs.length, data: certs };
+          }
+          return { success: true, count: memoryStore.certifications.length, data: memoryStore.certifications };
+        },
+        5 * 60 * 1000
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve certifications.' });
     }
@@ -45,6 +53,7 @@ export class CertificationController {
       if (mongoose.connection.readyState === 1) {
         const cert = new Certification(certData);
         await cert.save();
+        cacheService.invalidate('certification');
         await recordAuditLog('CREATED', `Certification: "${cert.title}"`, author, {
           provider: cert.provider,
           id: cert._id,
@@ -55,6 +64,7 @@ export class CertificationController {
 
       const mockCert = { _id: `cert-${Date.now()}`, ...certData };
       memoryStore.certifications.push(mockCert);
+      cacheService.invalidate('certification');
       await recordAuditLog('CREATED', `Certification: "${mockCert.title}"`, author, {
         provider: mockCert.provider,
         id: mockCert._id,
@@ -76,6 +86,7 @@ export class CertificationController {
           res.status(404).json({ success: false, message: 'Certification not found.' });
           return;
         }
+        cacheService.invalidate('certification');
         await recordAuditLog('UPDATED', `Certification: "${cert.title}"`, author, {
           provider: cert.provider,
           id: cert._id,
@@ -90,6 +101,7 @@ export class CertificationController {
         return;
       }
       memoryStore.certifications[idx] = { ...memoryStore.certifications[idx], ...req.body };
+      cacheService.invalidate('certification');
       await recordAuditLog('UPDATED', `Certification: "${memoryStore.certifications[idx].title}"`, author, {
         id,
       });
@@ -107,6 +119,7 @@ export class CertificationController {
       if (mongoose.connection.readyState === 1) {
         const cert = await Certification.findByIdAndDelete(id);
         const title = cert?.title || id;
+        cacheService.invalidate('certification');
         await recordAuditLog('DELETED', `Certification: "${title}"`, author, { id });
         res.status(200).json({ success: true, message: 'Certification deleted.' });
         return;
@@ -115,6 +128,7 @@ export class CertificationController {
       const target = memoryStore.certifications.find(c => c._id === id);
       const title = target?.title || id;
       memoryStore.certifications = memoryStore.certifications.filter(c => c._id !== id);
+      cacheService.invalidate('certification');
       await recordAuditLog('DELETED', `Certification: "${title}"`, author, { id });
       res.status(200).json({ success: true, message: 'Certification deleted.' });
     } catch (error: any) {

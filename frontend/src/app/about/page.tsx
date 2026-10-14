@@ -56,10 +56,20 @@ interface CertificationItem {
 
 
 export default function AboutPage() {
-  const [educationList, setEducationList] = useState<EducationItem[]>([]);
-  const [certificationsList, setCertificationsList] = useState<CertificationItem[]>([]);
-  const [settings, setSettings] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+  const [educationList, setEducationList] = useState<EducationItem[]>(() => api.getCached('education') || []);
+  const [certificationsList, setCertificationsList] = useState<CertificationItem[]>(() => api.getCached('certifications') || []);
+  const [settings, setSettings] = useState<any>(() => {
+    const mem = api.getCached('settings');
+    if (mem) return mem;
+    if (typeof window !== 'undefined') {
+      try {
+        const cached = localStorage.getItem('portfolio_settings');
+        if (cached) return JSON.parse(cached);
+      } catch {}
+    }
+    return null;
+  });
+  const [loading, setLoading] = useState(() => !api.hasCached('education') && !api.hasCached('certifications'));
 
   // Modals & Fullscreen State
   const [selectedCert, setSelectedCert] = useState<CertificationItem | null>(null);

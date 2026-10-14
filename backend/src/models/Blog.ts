@@ -34,6 +34,7 @@ const BlogSchema = new Schema<IBlog>(
 );
 
 BlogSchema.index({ published: 1, createdAt: -1 });
+BlogSchema.index({ published: 1, category: 1, createdAt: -1 });
 
 export const Blog = mongoose.models.Blog || mongoose.model<IBlog>('Blog', BlogSchema);
 export default Blog;

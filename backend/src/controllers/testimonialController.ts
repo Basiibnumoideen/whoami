@@ -5,16 +5,18 @@ import { recordAuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
 import { getParam } from '../utils/helpers';
+import { cacheService } from '../services/cacheService';
 
 export class TestimonialController {
   static async getTestimonials(req: Request, res: Response): Promise<void> {
     try {
-      if (mongoose.connection.readyState === 1) {
-        const testimonials = await Testimonial.find().sort({ order: 1 }).lean();
-        res.status(200).json({ success: true, count: testimonials.length, data: testimonials });
-        return;
-      }
-      res.status(200).json({ success: true, count: memoryStore.testimonials.length, data: memoryStore.testimonials });
+      await cacheService.handleCachedResponse(req, res, 'testimonials:all', async () => {
+        if (mongoose.connection.readyState === 1) {
+          const testimonials = await Testimonial.find().sort({ order: 1 }).lean();
+          return { success: true, count: testimonials.length, data: testimonials };
+        }
+        return { success: true, count: memoryStore.testimonials.length, data: memoryStore.testimonials };
+      });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve testimonials.' });
     }
@@ -43,6 +45,7 @@ export class TestimonialController {
       if (mongoose.connection.readyState === 1) {
         const item = new Testimonial(data);
         await item.save();
+        cacheService.invalidate('testimonial');
         await recordAuditLog('CREATED', `Testimonial from ${item.name}`, author, {
           company: item.company,
           role: item.role,
@@ -54,6 +57,7 @@ export class TestimonialController {
 
       const mock = { _id: `test-${Date.now()}`, ...data };
       memoryStore.testimonials.push(mock);
+      cacheService.invalidate('testimonial');
       await recordAuditLog('CREATED', `Testimonial from ${mock.name}`, author, {
         company: mock.company,
         role: mock.role,
@@ -76,6 +80,7 @@ export class TestimonialController {
           res.status(404).json({ success: false, message: 'Testimonial not found.' });
           return;
         }
+        cacheService.invalidate('testimonial');
         await recordAuditLog('UPDATED', `Testimonial from ${item.name}`, author, {
           company: item.company,
           role: item.role,
@@ -91,6 +96,7 @@ export class TestimonialController {
         return;
       }
       memoryStore.testimonials[idx] = { ...memoryStore.testimonials[idx], ...req.body };
+      cacheService.invalidate('testimonial');
       await recordAuditLog('UPDATED', `Testimonial from ${memoryStore.testimonials[idx].name}`, author, {
         id,
       });
@@ -108,6 +114,7 @@ export class TestimonialController {
       if (mongoose.connection.readyState === 1) {
         const item = await Testimonial.findByIdAndDelete(id);
         const name = item ? item.name : id;
+        cacheService.invalidate('testimonial');
         await recordAuditLog('DELETED', `Testimonial from ${name}`, author, { id });
         res.status(200).json({ success: true, message: 'Testimonial deleted.' });
         return;
@@ -116,6 +123,7 @@ export class TestimonialController {
       const item = memoryStore.testimonials.find(t => t._id === id);
       const name = item ? item.name : id;
       memoryStore.testimonials = memoryStore.testimonials.filter(t => t._id !== id);
+      cacheService.invalidate('testimonial');
       await recordAuditLog('DELETED', `Testimonial from ${name}`, author, { id });
       res.status(200).json({ success: true, message: 'Testimonial deleted.' });
     } catch (error: any) {

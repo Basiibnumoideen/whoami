@@ -5,6 +5,7 @@ import { AuditLog } from '../models/AuditLog';
 import { slugify, getParam, isObjectId, sanitizeSearchString } from '../utils/helpers';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
+import { cacheService } from '../services/cacheService';
 
 export class ProjectController {
   /**
@@ -13,40 +14,48 @@ export class ProjectController {
   static async getProjects(req: Request, res: Response): Promise<void> {
     try {
       const { category, featured, search } = req.query;
+      const cacheKey = `projects:${category || 'all'}:${featured || 'false'}:${search || ''}`;
 
-      if (mongoose.connection.readyState === 1) {
-        const query: any = {};
-        if (category && category !== 'All' && typeof category === 'string') query.category = category;
-        if (featured === 'true') query.featured = true;
-        
-        const sanitizedSearch = sanitizeSearchString(search);
-        if (sanitizedSearch) {
-          query.$or = [
-            { title: { $regex: sanitizedSearch, $options: 'i' } },
-            { description: { $regex: sanitizedSearch, $options: 'i' } },
-            { tags: { $regex: sanitizedSearch, $options: 'i' } },
-          ];
-        }
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        cacheKey,
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            const query: any = {};
+            if (category && category !== 'All' && typeof category === 'string') query.category = category;
+            if (featured === 'true') query.featured = true;
 
-        const projects = await Project.find(query).sort({ order: 1, createdAt: -1 }).lean();
-        res.status(200).json({ success: true, count: projects.length, data: projects });
-        return;
-      }
+            const sanitizedSearch = sanitizeSearchString(search);
+            if (sanitizedSearch) {
+              query.$or = [
+                { title: { $regex: sanitizedSearch, $options: 'i' } },
+                { description: { $regex: sanitizedSearch, $options: 'i' } },
+                { tags: { $regex: sanitizedSearch, $options: 'i' } },
+              ];
+            }
 
-      // Memory Store Fallback
-      let result = [...memoryStore.projects];
-      if (category && category !== 'All') {
-        result = result.filter(p => p.category === category);
-      }
-      if (featured === 'true') {
-        result = result.filter(p => p.featured);
-      }
-      if (search && typeof search === 'string') {
-        const s = search.toLowerCase();
-        result = result.filter(p => p.title.toLowerCase().includes(s) || p.description.toLowerCase().includes(s));
-      }
+            const projects = await Project.find(query).sort({ order: 1, createdAt: -1 }).lean();
+            return { success: true, count: projects.length, data: projects };
+          }
 
-      res.status(200).json({ success: true, count: result.length, data: result });
+          // Memory Store Fallback
+          let result = [...memoryStore.projects];
+          if (category && category !== 'All') {
+            result = result.filter(p => p.category === category);
+          }
+          if (featured === 'true') {
+            result = result.filter(p => p.featured);
+          }
+          if (search && typeof search === 'string') {
+            const s = search.toLowerCase();
+            result = result.filter(p => p.title.toLowerCase().includes(s) || p.description.toLowerCase().includes(s));
+          }
+
+          return { success: true, count: result.length, data: result };
+        },
+        5 * 60 * 1000 // 5-minute server cache
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve projects.' });
     }
@@ -58,25 +67,31 @@ export class ProjectController {
   static async getProject(req: Request, res: Response): Promise<void> {
     try {
       const idOrSlug = getParam(req.params.idOrSlug);
+      const cacheKey = `project:${idOrSlug}`;
 
-      if (mongoose.connection.readyState === 1) {
-        const conditions: any[] = [{ slug: idOrSlug }];
-        if (isObjectId(idOrSlug)) conditions.push({ _id: idOrSlug });
-        const project = await Project.findOne({ $or: conditions }).lean();
-        if (!project) {
-          res.status(404).json({ success: false, message: 'Project not found.' });
-          return;
-        }
-        res.status(200).json({ success: true, data: project });
-        return;
-      }
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        cacheKey,
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            const conditions: any[] = [{ slug: idOrSlug }];
+            if (isObjectId(idOrSlug)) conditions.push({ _id: idOrSlug });
+            const project = await Project.findOne({ $or: conditions }).lean();
+            if (!project) {
+              return { success: false, message: 'Project not found.', _notFound: true };
+            }
+            return { success: true, data: project };
+          }
 
-      const project = memoryStore.projects.find(p => p.slug === idOrSlug || p._id === idOrSlug);
-      if (!project) {
-        res.status(404).json({ success: false, message: 'Project not found.' });
-        return;
-      }
-      res.status(200).json({ success: true, data: project });
+          const project = memoryStore.projects.find(p => p.slug === idOrSlug || p._id === idOrSlug);
+          if (!project) {
+            return { success: false, message: 'Project not found.', _notFound: true };
+          }
+          return { success: true, data: project };
+        },
+        5 * 60 * 1000
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve project.', error: error.message });
     }
@@ -150,6 +165,7 @@ export class ProjectController {
         }
         const project = new Project(projectData);
         await project.save();
+        cacheService.invalidate('project');
         await AuditLog.create({
           action: 'CREATED',
           target: `Project: "${project.title}"`,
@@ -163,6 +179,8 @@ export class ProjectController {
       // Memory fallback
       const mockProject = { _id: `proj-${Date.now()}`, ...projectData };
       memoryStore.projects.unshift(mockProject);
+      cacheService.invalidate('project');
+      res.status(201).json({ success: true, message: 'Project created.', data: mockProject });
     } catch (error: any) {
       console.error('[ProjectController createProject Error]:', error);
       res.status(500).json({
@@ -192,6 +210,7 @@ export class ProjectController {
         if (req.body.image && !req.body.thumbnailImage) req.body.thumbnailImage = req.body.image;
         Object.assign(project, req.body);
         await project.save();
+        cacheService.invalidate('project');
         await AuditLog.create({
           action: 'UPDATED',
           target: `Project: "${project.title}"`,
@@ -208,6 +227,7 @@ export class ProjectController {
         return;
       }
       memoryStore.projects[idx] = { ...memoryStore.projects[idx], ...req.body };
+      cacheService.invalidate('project');
       res.status(200).json({ success: true, message: 'Project updated.', data: memoryStore.projects[idx] });
     } catch (error: any) {
       console.error('[ProjectController updateProject Error]:', error);
@@ -234,6 +254,7 @@ export class ProjectController {
           res.status(404).json({ success: false, message: 'Project not found.' });
           return;
         }
+        cacheService.invalidate('project');
         await AuditLog.create({
           action: 'DELETED',
           target: `Project: "${project.title}"`,
@@ -250,6 +271,7 @@ export class ProjectController {
         res.status(404).json({ success: false, message: 'Project not found.' });
         return;
       }
+      cacheService.invalidate('project');
       res.status(200).json({ success: true, message: 'Project deleted successfully.' });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to delete project.', error: error.message });
@@ -275,6 +297,7 @@ export class ProjectController {
           },
         }));
         await Project.bulkWrite(bulkOps);
+        cacheService.invalidate('project');
         await AuditLog.create({
           action: 'UPDATED',
           target: `Project Showcase Order (${items.length} items)`,

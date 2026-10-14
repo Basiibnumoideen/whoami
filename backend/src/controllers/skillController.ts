@@ -5,6 +5,7 @@ import { AuditLog } from '../models/AuditLog';
 import { getParam, isObjectId } from '../utils/helpers';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
+import { cacheService } from '../services/cacheService';
 
 export class SkillController {
   /**
@@ -13,23 +14,31 @@ export class SkillController {
   static async getSkills(req: Request, res: Response): Promise<void> {
     try {
       const { category } = req.query;
+      const cacheKey = `skills:${category || 'all'}`;
 
-      if (mongoose.connection.readyState === 1) {
-        const query: any = {};
-        if (category && category !== 'All') query.category = category;
-        const skills = await Skill.find(query).sort({ order: 1, level: -1 }).lean();
-        res.status(200).json({ success: true, count: skills.length, data: skills });
-        return;
-      }
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        cacheKey,
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            const query: any = {};
+            if (category && category !== 'All') query.category = category;
+            const skills = await Skill.find(query).sort({ order: 1, level: -1 }).lean();
+            return { success: true, count: skills.length, data: skills };
+          }
 
-      // Memory Store Fallback
-      let result = [...memoryStore.skills];
-      if (category && category !== 'All') {
-        result = result.filter(s => s.category === category);
-      }
-      result.sort((a, b) => (a.order || 0) - (b.order || 0));
+          // Memory Store Fallback
+          let result = [...memoryStore.skills];
+          if (category && category !== 'All') {
+            result = result.filter(s => s.category === category);
+          }
+          result.sort((a, b) => (a.order || 0) - (b.order || 0));
 
-      res.status(200).json({ success: true, count: result.length, data: result });
+          return { success: true, count: result.length, data: result };
+        },
+        5 * 60 * 1000
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve skills.' });
     }
@@ -64,6 +73,7 @@ export class SkillController {
         }
         const skill = new Skill(skillData);
         await skill.save();
+        cacheService.invalidate('skill');
         await AuditLog.create({
           action: 'CREATED',
           target: `Skill: "${skill.name}" (${skill.category})`,
@@ -77,6 +87,7 @@ export class SkillController {
       // Memory fallback
       const mockSkill = { _id: `sk-${Date.now()}`, ...skillData };
       memoryStore.skills.push(mockSkill);
+      cacheService.invalidate('skill');
       res.status(201).json({ success: true, message: 'Skill created.', data: mockSkill });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to create skill.', error: error.message });
@@ -100,6 +111,7 @@ export class SkillController {
         }
         Object.assign(skill, req.body);
         await skill.save();
+        cacheService.invalidate('skill');
         await AuditLog.create({
           action: 'UPDATED',
           target: `Skill: "${skill.name}" (${skill.category})`,
@@ -116,6 +128,7 @@ export class SkillController {
         return;
       }
       memoryStore.skills[idx] = { ...memoryStore.skills[idx], ...req.body };
+      cacheService.invalidate('skill');
       res.status(200).json({ success: true, message: 'Skill updated.', data: memoryStore.skills[idx] });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to update skill.', error: error.message });
@@ -137,6 +150,7 @@ export class SkillController {
           res.status(404).json({ success: false, message: 'Skill not found.' });
           return;
         }
+        cacheService.invalidate('skill');
         await AuditLog.create({
           action: 'DELETED',
           target: `Skill: "${skill.name}" (${skill.category})`,
@@ -153,6 +167,7 @@ export class SkillController {
         res.status(404).json({ success: false, message: 'Skill not found.' });
         return;
       }
+      cacheService.invalidate('skill');
       res.status(200).json({ success: true, message: 'Skill deleted.' });
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to delete skill.', error: error.message });
@@ -178,11 +193,13 @@ export class SkillController {
           },
         }));
         await Skill.bulkWrite(bulkOps);
+        cacheService.invalidate('skill');
       } else {
         items.forEach(item => {
           const s = memoryStore.skills.find(s => s._id === item.id || s.name === item.name);
           if (s) s.order = item.order;
         });
+        cacheService.invalidate('skill');
       }
 
       res.status(200).json({ success: true, message: 'Skills reordered successfully.' });

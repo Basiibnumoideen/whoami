@@ -7,17 +7,25 @@ import { recordAuditLog } from '../models/AuditLog';
 import { AuthenticatedRequest } from '../middleware/authMiddleware';
 import { memoryStore } from '../services/memoryStore';
 import { getParam } from '../utils/helpers';
+import { cacheService } from '../services/cacheService';
 
 export class ExperienceController {
   // Experiences CRUD
   static async getExperiences(req: Request, res: Response): Promise<void> {
     try {
-      if (mongoose.connection.readyState === 1) {
-        const experiences = await Experience.find().sort({ order: 1, createdAt: -1 }).lean();
-        res.status(200).json({ success: true, count: experiences.length, data: experiences });
-        return;
-      }
-      res.status(200).json({ success: true, count: memoryStore.experiences.length, data: memoryStore.experiences });
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        'experiences',
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            const experiences = await Experience.find().sort({ order: 1, createdAt: -1 }).lean();
+            return { success: true, count: experiences.length, data: experiences };
+          }
+          return { success: true, count: memoryStore.experiences.length, data: memoryStore.experiences };
+        },
+        5 * 60 * 1000
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve experience.' });
     }
@@ -50,6 +58,7 @@ export class ExperienceController {
       if (mongoose.connection.readyState === 1) {
         const exp = new Experience(data);
         await exp.save();
+        cacheService.invalidate('experience');
         await recordAuditLog('CREATED', `Experience: "${exp.role} at ${exp.company}"`, author, {
           company: exp.company,
           role: exp.role,
@@ -61,6 +70,7 @@ export class ExperienceController {
 
       const mock = { _id: `exp-${Date.now()}`, ...data };
       memoryStore.experiences.push(mock);
+      cacheService.invalidate('experience');
       await recordAuditLog('CREATED', `Experience: "${mock.role} at ${mock.company}"`, author, {
         company: mock.company,
         role: mock.role,
@@ -83,6 +93,7 @@ export class ExperienceController {
           res.status(404).json({ success: false, message: 'Experience record not found.' });
           return;
         }
+        cacheService.invalidate('experience');
         await recordAuditLog('UPDATED', `Experience: "${exp.role} at ${exp.company}"`, author, {
           company: exp.company,
           role: exp.role,
@@ -98,6 +109,7 @@ export class ExperienceController {
         return;
       }
       memoryStore.experiences[idx] = { ...memoryStore.experiences[idx], ...req.body };
+      cacheService.invalidate('experience');
       await recordAuditLog('UPDATED', `Experience: "${memoryStore.experiences[idx].role} at ${memoryStore.experiences[idx].company}"`, author, {
         id,
       });
@@ -115,6 +127,7 @@ export class ExperienceController {
       if (mongoose.connection.readyState === 1) {
         const exp = await Experience.findByIdAndDelete(id);
         const label = exp ? `${exp.role} at ${exp.company}` : id;
+        cacheService.invalidate('experience');
         await recordAuditLog('DELETED', `Experience: "${label}"`, author, { id });
         res.status(200).json({ success: true, message: 'Experience deleted.' });
         return;
@@ -123,6 +136,7 @@ export class ExperienceController {
       const exp = memoryStore.experiences.find(e => e._id === id);
       const label = exp ? `${exp.role} at ${exp.company}` : id;
       memoryStore.experiences = memoryStore.experiences.filter(e => e._id !== id);
+      cacheService.invalidate('experience');
       await recordAuditLog('DELETED', `Experience: "${label}"`, author, { id });
       res.status(200).json({ success: true, message: 'Experience deleted.' });
     } catch (error: any) {
@@ -133,15 +147,22 @@ export class ExperienceController {
   // Now Single-Record Update
   static async getNow(req: Request, res: Response): Promise<void> {
     try {
-      if (mongoose.connection.readyState === 1) {
-        let now = await NowUpdate.findOne();
-        if (!now) {
-          now = await NowUpdate.create(memoryStore.now);
-        }
-        res.status(200).json({ success: true, data: now });
-        return;
-      }
-      res.status(200).json({ success: true, data: memoryStore.now });
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        'now',
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            let now = await NowUpdate.findOne().lean();
+            if (!now) {
+              now = await NowUpdate.create(memoryStore.now);
+            }
+            return { success: true, data: now };
+          }
+          return { success: true, data: memoryStore.now };
+        },
+        5 * 60 * 1000
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve Now status.', error: error.message });
     }
@@ -157,6 +178,7 @@ export class ExperienceController {
         else Object.assign(now, req.body);
         now.lastUpdated = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
         await now.save();
+        cacheService.invalidate('now');
         await recordAuditLog('UPDATED', 'Now Status Dashboard Section', author, {
           currentFocus: now.currentFocus,
         });
@@ -165,6 +187,7 @@ export class ExperienceController {
       }
 
       memoryStore.now = { ...memoryStore.now, ...req.body, lastUpdated: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }) };
+      cacheService.invalidate('now');
       await recordAuditLog('UPDATED', 'Now Status Dashboard Section', author);
       res.status(200).json({ success: true, message: 'Now status updated.', data: memoryStore.now });
     } catch (error: any) {
@@ -175,12 +198,19 @@ export class ExperienceController {
   // AI Knowledge Base
   static async getAIKnowledge(req: Request, res: Response): Promise<void> {
     try {
-      if (mongoose.connection.readyState === 1) {
-        const kb = await AIKnowledgeBase.find();
-        res.status(200).json({ success: true, count: kb.length, data: kb });
-        return;
-      }
-      res.status(200).json({ success: true, count: memoryStore.aiKb.length, data: memoryStore.aiKb });
+      await cacheService.handleCachedResponse(
+        req,
+        res,
+        'aiKb',
+        async () => {
+          if (mongoose.connection.readyState === 1) {
+            const kb = await AIKnowledgeBase.find().lean();
+            return { success: true, count: kb.length, data: kb };
+          }
+          return { success: true, count: memoryStore.aiKb.length, data: memoryStore.aiKb };
+        },
+        5 * 60 * 1000
+      );
     } catch (error: any) {
       res.status(500).json({ success: false, message: 'Failed to retrieve AI Knowledge Base.', error: error.message });
     }
@@ -193,6 +223,7 @@ export class ExperienceController {
       if (mongoose.connection.readyState === 1) {
         const item = new AIKnowledgeBase(req.body);
         await item.save();
+        cacheService.invalidate('aiKb');
         await recordAuditLog('CREATED', `AI Knowledge Fact: "${item.topic}"`, author, {
           category: item.category,
           id: item._id,
@@ -202,6 +233,7 @@ export class ExperienceController {
       }
       const mock = { _id: `kb-${Date.now()}`, ...req.body };
       memoryStore.aiKb.push(mock);
+      cacheService.invalidate('aiKb');
       await recordAuditLog('CREATED', `AI Knowledge Fact: "${mock.topic}"`, author, {
         category: mock.category,
         id: mock._id,
@@ -220,6 +252,7 @@ export class ExperienceController {
       if (mongoose.connection.readyState === 1) {
         const kb = await AIKnowledgeBase.findByIdAndDelete(id);
         const topic = kb?.topic || id;
+        cacheService.invalidate('aiKb');
         await recordAuditLog('DELETED', `AI Knowledge Fact: "${topic}"`, author, { id });
         res.status(200).json({ success: true, message: 'Grounding fact deleted.' });
         return;
@@ -227,6 +260,7 @@ export class ExperienceController {
       const kb = memoryStore.aiKb.find(k => k._id !== id);
       const topic = kb?.topic || id;
       memoryStore.aiKb = memoryStore.aiKb.filter(k => k._id !== id);
+      cacheService.invalidate('aiKb');
       await recordAuditLog('DELETED', `AI Knowledge Fact: "${topic}"`, author, { id });
       res.status(200).json({ success: true, message: 'Grounding fact deleted.' });
     } catch (error: any) {
