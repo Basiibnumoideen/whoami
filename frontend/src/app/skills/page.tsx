@@ -18,13 +18,16 @@ interface SkillItem {
 }
 
 export default function SkillsPage() {
-  const [skills, setSkills] = useState<SkillItem[]>(() => {
-    const cached = api.getCached<SkillItem[]>('skills');
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [loading, setLoading] = useState(() => !api.hasCached('skills'));
+  const [skills, setSkills] = useState<SkillItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const cached = api.getCached<SkillItem[]>('skills');
+    if (Array.isArray(cached) && cached.length > 0) {
+      setSkills(cached);
+      setLoading(false);
+    }
+
     // Dynamic MongoDB API Fetch
     api.skills.getAll()
       .then((data) => {

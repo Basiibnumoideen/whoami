@@ -39,11 +39,8 @@ function ProjectsContent() {
   const searchParams = useSearchParams();
   const initialSkill = searchParams.get('skill');
 
-  const [projects, setProjects] = useState<ProjectItem[]>(() => {
-    const cached = api.getCached<ProjectItem[]>('projects');
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [loading, setLoading] = useState(() => !api.hasCached('projects'));
+  const [projects, setProjects] = useState<ProjectItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const [manualSkillFilter, setManualSkillFilter] = useState<string | null>(null);
@@ -51,6 +48,12 @@ function ProjectsContent() {
 
   // Dynamic fetch from MongoDB API
   useEffect(() => {
+    const cached = api.getCached<ProjectItem[]>('projects');
+    if (Array.isArray(cached) && cached.length > 0) {
+      setProjects(cached);
+      setLoading(false);
+    }
+
     api.projects.getAll()
       .then((data) => {
         setProjects(Array.isArray(data) ? data : []);

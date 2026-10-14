@@ -22,13 +22,18 @@ interface ExperienceItem {
 }
 
 export default function ExperiencePage() {
-  const [experiences, setExperiences] = useState<ExperienceItem[]>(() => {
-    const cached = api.getCached<ExperienceItem[]>('experiences');
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [loading, setLoading] = useState(() => !api.hasCached('experiences'));
+  const [experiences, setExperiences] = useState<ExperienceItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // 1. Instant client-side cache hydration
+    const cached = api.getCached<ExperienceItem[]>('experiences');
+    if (Array.isArray(cached) && cached.length > 0) {
+      setExperiences(cached);
+      setLoading(false);
+    }
+
+    // 2. Fetch fresh data from MongoDB API
     api.experiences.getAll()
       .then((data) => {
         setExperiences(Array.isArray(data) ? data : []);

@@ -20,15 +20,18 @@ interface BlogPostItem {
 }
 
 export default function BlogPage() {
-  const [posts, setPosts] = useState<BlogPostItem[]>(() => {
-    const cached = api.getCached<BlogPostItem[]>('blogs');
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [loading, setLoading] = useState(() => !api.hasCached('blogs'));
+  const [posts, setPosts] = useState<BlogPostItem[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
 
   useEffect(() => {
+    const cached = api.getCached<BlogPostItem[]>('blogs');
+    if (Array.isArray(cached) && cached.length > 0) {
+      setPosts(cached);
+      setLoading(false);
+    }
+
     api.blogs.getAll()
       .then((data) => {
         setPosts(Array.isArray(data) ? data : []);

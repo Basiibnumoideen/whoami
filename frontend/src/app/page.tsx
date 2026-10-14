@@ -47,35 +47,12 @@ export default function Home() {
   const [selectedProjectForModal, setSelectedProjectForModal] = useState<any | null>(null);
 
   // Dynamic MongoDB state with instant cache hydration
-  const [projects, setProjects] = useState<any[]>(() => {
-    const cached = api.getCached<any[]>('projects');
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [skills, setSkills] = useState<any[]>(() => {
-    const cached = api.getCached<any[]>('skills');
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [services, setServices] = useState<any[]>(() => {
-    const cached = api.getCached<any[]>('services');
-    return Array.isArray(cached) ? cached.filter((s: any) => s.status !== 'inactive') : [];
-  });
-  const [testimonials, setTestimonials] = useState<any[]>(() => {
-    const cached = api.getCached<any>('testimonials');
-    const list = Array.isArray(cached) ? cached : (cached as any)?.data;
-    return Array.isArray(list) ? list : [];
-  });
-  const [settings, setSettings] = useState<any>(() => {
-    const mem = api.getCached('settings');
-    if (mem) return mem;
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('portfolio_settings');
-        if (cached) return JSON.parse(cached);
-      } catch {}
-    }
-    return null;
-  });
-  const [loading, setLoading] = useState(() => !api.hasCached('projects') && !api.hasCached('settings'));
+  const [projects, setProjects] = useState<any[]>([]);
+  const [skills, setSkills] = useState<any[]>([]);
+  const [services, setServices] = useState<any[]>([]);
+  const [testimonials, setTestimonials] = useState<any[]>([]);
+  const [settings, setSettings] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   // GitHub Stats
   const [gitStats, setGitStats] = useState({
@@ -111,6 +88,18 @@ export default function Home() {
   };
 
   useEffect(() => {
+    // 1. Instant client-side cache hydration
+    const cachedProjects = api.getCached<any[]>('projects');
+    const cachedSkills = api.getCached<any[]>('skills');
+    const cachedServices = api.getCached<any[]>('services');
+    const memSettings = api.getCached('settings');
+    if (Array.isArray(cachedProjects) && cachedProjects.length > 0) setProjects(cachedProjects);
+    if (Array.isArray(cachedSkills) && cachedSkills.length > 0) setSkills(cachedSkills);
+    if (Array.isArray(cachedServices) && cachedServices.length > 0) {
+      setServices(cachedServices.filter((s: any) => s.status !== 'inactive'));
+    }
+    if (memSettings) setSettings(memSettings);
+
     try {
       const cached = localStorage.getItem('portfolio_settings');
       if (cached) setSettings(JSON.parse(cached));

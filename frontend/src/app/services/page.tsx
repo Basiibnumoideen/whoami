@@ -21,13 +21,16 @@ interface ServiceItem {
 }
 
 export default function ServicesPage() {
-  const [services, setServices] = useState<ServiceItem[]>(() => {
-    const cached = api.getCached<ServiceItem[]>('services');
-    return Array.isArray(cached) ? cached.filter((s: ServiceItem) => s.status !== 'inactive') : [];
-  });
-  const [loading, setLoading] = useState(() => !api.hasCached('services'));
+  const [services, setServices] = useState<ServiceItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const cached = api.getCached<ServiceItem[]>('services');
+    if (Array.isArray(cached) && cached.length > 0) {
+      setServices(cached.filter((s: ServiceItem) => s.status !== 'inactive'));
+      setLoading(false);
+    }
+
     api.services.getAll()
       .then((data) => {
         // Filter out inactive services on public site

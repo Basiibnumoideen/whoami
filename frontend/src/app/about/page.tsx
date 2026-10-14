@@ -56,26 +56,10 @@ interface CertificationItem {
 
 
 export default function AboutPage() {
-  const [educationList, setEducationList] = useState<EducationItem[]>(() => {
-    const cached = api.getCached<EducationItem[]>('education');
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [certificationsList, setCertificationsList] = useState<CertificationItem[]>(() => {
-    const cached = api.getCached<CertificationItem[]>('certifications');
-    return Array.isArray(cached) ? cached : [];
-  });
-  const [settings, setSettings] = useState<any>(() => {
-    const mem = api.getCached('settings');
-    if (mem) return mem;
-    if (typeof window !== 'undefined') {
-      try {
-        const cached = localStorage.getItem('portfolio_settings');
-        if (cached) return JSON.parse(cached);
-      } catch {}
-    }
-    return null;
-  });
-  const [loading, setLoading] = useState(() => !api.hasCached('education') && !api.hasCached('certifications'));
+  const [educationList, setEducationList] = useState<EducationItem[]>([]);
+  const [certificationsList, setCertificationsList] = useState<CertificationItem[]>([]);
+  const [settings, setSettings] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
 
   // Modals & Fullscreen State
   const [selectedCert, setSelectedCert] = useState<CertificationItem | null>(null);
@@ -134,6 +118,15 @@ export default function AboutPage() {
   });
 
   useEffect(() => {
+    // 1. Instant client-side cache hydration
+    const cachedEdu = api.getCached<EducationItem[]>('education');
+    const cachedCerts = api.getCached<CertificationItem[]>('certifications');
+    const memSettings = api.getCached('settings');
+    if (Array.isArray(cachedEdu) && cachedEdu.length > 0) setEducationList(cachedEdu);
+    if (Array.isArray(cachedCerts) && cachedCerts.length > 0) setCertificationsList(cachedCerts);
+    if (memSettings) setSettings(memSettings);
+    if (cachedEdu || cachedCerts) setLoading(false);
+
     try {
       const cached = localStorage.getItem('portfolio_settings');
       if (cached) setSettings(JSON.parse(cached));
