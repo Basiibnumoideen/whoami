@@ -87,12 +87,13 @@ function isCacheable(endpoint: string, options: RequestInit): boolean {
   if (method !== 'GET') return false;
 
   const ep = endpoint.toLowerCase();
-  // Do NOT cache private admin or mutation endpoints
+  // Do NOT cache private admin, mutation endpoints, or volatile real-time entities like testimonials
   if (
     ep.includes('/auth/') ||
     ep.includes('/admin/') ||
     ep.includes('/messages') ||
     ep.includes('/upload') ||
+    ep.includes('/testimonials') ||
     ep.includes('/analytics/audit-logs')
   ) {
     return false;
@@ -147,6 +148,8 @@ export function invalidateCache(namespace?: string): void {
           if (k && k.startsWith('portfolio_cache_')) keysToRemove.push(k);
         }
         keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+        localStorage.setItem('portfolio_cache_invalidated', `all:${Date.now()}`);
+        window.dispatchEvent(new CustomEvent('portfolio_cache_invalidated', { detail: 'all' }));
       } catch { }
     }
     return;
@@ -167,6 +170,8 @@ export function invalidateCache(namespace?: string): void {
         if (k && k.toLowerCase().includes(prefix)) keysToRemove.push(k);
       }
       keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+      localStorage.setItem('portfolio_cache_invalidated', `${prefix}:${Date.now()}`);
+      window.dispatchEvent(new CustomEvent('portfolio_cache_invalidated', { detail: prefix }));
     } catch { }
   }
 }
@@ -557,10 +562,14 @@ export const api = {
 
   // Testimonials CMS
   testimonials: {
-    getAll: async () => {
+    getAll: async (forceRefresh?: boolean) => {
       try {
-        const res = await request<{ success: boolean; data: any[] }>('/testimonials');
-        return res.data || [];
+        const endpoint = forceRefresh ? '/testimonials?refresh=true' : '/testimonials';
+        const res = await request<{ success: boolean; data: any[] }>(endpoint, {
+          cache: forceRefresh ? 'no-store' : 'default',
+        });
+        const list = Array.isArray(res) ? res : res?.data || [];
+        return Array.isArray(list) ? list : [];
       } catch (err) {
         console.warn('api.testimonials.getAll notice:', err);
         return [];
@@ -568,26 +577,29 @@ export const api = {
     },
 
     create: async (data: any) => {
-      invalidateCache('testimonials');
-      return request<{ success: boolean; data: any; message: string }>('/testimonials', {
+      const res = await request<{ success: boolean; data: any; message: string }>('/testimonials', {
         method: 'POST',
         body: JSON.stringify(data),
       });
+      invalidateCache('testimonials');
+      return res;
     },
 
     update: async (id: string, data: any) => {
-      invalidateCache('testimonials');
-      return request<{ success: boolean; data: any; message: string }>(`/testimonials/${id}`, {
+      const res = await request<{ success: boolean; data: any; message: string }>(`/testimonials/${id}`, {
         method: 'PUT',
         body: JSON.stringify(data),
       });
+      invalidateCache('testimonials');
+      return res;
     },
 
     delete: async (id: string) => {
-      invalidateCache('testimonials');
-      return request<{ success: boolean; message: string }>(`/testimonials/${id}`, {
+      const res = await request<{ success: boolean; message: string }>(`/testimonials/${id}`, {
         method: 'DELETE',
       });
+      invalidateCache('testimonials');
+      return res;
     },
   },
 

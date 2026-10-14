@@ -1107,27 +1107,50 @@ function DashboardContent() {
       rating: Number(testFormRating),
     };
 
-    if (editingTestimonial) {
-      await api.testimonials.update(editingTestimonial._id || editingTestimonial.id, testData).catch(() => null);
-      setTestimonialsList(prev => prev.map(t => (t._id === editingTestimonial._id || t.id === editingTestimonial.id) ? { ...t, ...testData } : t));
-      showToast(`Testimonial from ${testData.name} updated!`);
-    } else {
-      const res = await api.testimonials.create(testData).catch(() => null);
-      setTestimonialsList(prev => [res?.data || testData, ...prev]);
-      setStats(prev => ({ ...prev, totalTestimonials: prev.totalTestimonials + 1 }));
-      showToast(`Testimonial from ${testData.name} added!`);
+    try {
+      if (editingTestimonial) {
+        const id = editingTestimonial._id || editingTestimonial.id;
+        const res = await api.testimonials.update(id, testData);
+        if (res && res.success === false) {
+          showToast(res.message || 'Failed to update review.', 'error');
+          return;
+        }
+        setTestimonialsList(prev => prev.map(t => (t._id === id || t.id === id) ? { ...t, ...testData } : t));
+        showToast(`Review from ${testData.name} updated!`);
+      } else {
+        const res = await api.testimonials.create(testData);
+        if (res && res.success === false) {
+          showToast(res.message || 'Failed to create review.', 'error');
+          return;
+        }
+        setTestimonialsList(prev => [res?.data || testData, ...prev]);
+        setStats(prev => ({ ...prev, totalTestimonials: prev.totalTestimonials + 1 }));
+        showToast(`Review from ${testData.name} added!`);
+      }
+      setIsTestModalOpen(false);
+      refreshAllData();
+    } catch (err: any) {
+      console.error('Save testimonial error:', err);
+      showToast(err?.message || 'Failed to save review.', 'error');
     }
-    setIsTestModalOpen(false);
-    refreshAllData();
   };
 
   const handleDeleteTestimonial = async (id: string) => {
-    if (!confirm('Delete this testimonial?')) return;
-    await api.testimonials.delete(id).catch(() => null);
-    setTestimonialsList(prev => prev.filter(t => t._id !== id && t.id !== id));
-    setStats(prev => ({ ...prev, totalTestimonials: Math.max(0, prev.totalTestimonials - 1) }));
-    showToast('Testimonial deleted.');
-    refreshAllData();
+    if (!confirm('Are you sure you want to permanently delete this review?')) return;
+    try {
+      const res = await api.testimonials.delete(id);
+      if (res && res.success === false) {
+        showToast(res.message || 'Failed to delete review.', 'error');
+        return;
+      }
+      setTestimonialsList(prev => prev.filter(t => t._id !== id && t.id !== id));
+      setStats(prev => ({ ...prev, totalTestimonials: Math.max(0, prev.totalTestimonials - 1) }));
+      showToast('Review permanently deleted.');
+      refreshAllData();
+    } catch (err: any) {
+      console.error('Delete review error:', err);
+      showToast(err?.message || 'Failed to delete review from database.', 'error');
+    }
   };
 
   // =========================================================================

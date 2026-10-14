@@ -30,7 +30,8 @@ import {
   Globe,
   Atom,
   Hexagon,
-  Database
+  Database,
+  FileText
 } from 'lucide-react';
 import { Github } from '@/components/icons';
 import { api } from '@/lib/api';
@@ -59,8 +60,9 @@ export default function Home() {
     return Array.isArray(cached) ? cached.filter((s: any) => s.status !== 'inactive') : [];
   });
   const [testimonials, setTestimonials] = useState<any[]>(() => {
-    const cached = api.getCached<any[]>('testimonials');
-    return Array.isArray(cached) ? cached : [];
+    const cached = api.getCached<any>('testimonials');
+    const list = Array.isArray(cached) ? cached : (cached as any)?.data;
+    return Array.isArray(list) ? list : [];
   });
   const [settings, setSettings] = useState<any>(() => {
     const mem = api.getCached('settings');
@@ -118,7 +120,7 @@ export default function Home() {
       api.projects.getAll().catch(() => []),
       api.skills.getAll().catch(() => []),
       api.services.getAll().catch(() => []),
-      api.testimonials.getAll().catch(() => []),
+      api.testimonials.getAll(true).catch(() => []),
       api.settings.get().catch(() => null),
     ]).then(([pr, sk, srv, test, set]) => {
       setProjects(Array.isArray(pr) ? pr : []);
@@ -133,6 +135,26 @@ export default function Home() {
       if (e.detail) setSettings(e.detail);
     };
     window.addEventListener('portfolio_settings_updated', handleSettingsUpdate);
+
+    // Dynamic cache invalidation & cross-tab sync for reviews
+    const handleCacheInvalidated = (e: any) => {
+      const detail = e.detail || '';
+      if (!detail || detail === 'all' || detail.startsWith('testimonials')) {
+        api.testimonials.getAll(true).then(test => {
+          setTestimonials(Array.isArray(test) ? test : []);
+        }).catch(() => setTestimonials([]));
+      }
+    };
+    window.addEventListener('portfolio_cache_invalidated', handleCacheInvalidated);
+
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'portfolio_cache_invalidated' && (e.newValue?.startsWith('all') || e.newValue?.startsWith('testimonials'))) {
+        api.testimonials.getAll(true).then(test => {
+          setTestimonials(Array.isArray(test) ? test : []);
+        }).catch(() => setTestimonials([]));
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
 
     // Telemetry visitor & page-view tracking
     if (typeof window !== 'undefined') {
@@ -160,6 +182,8 @@ export default function Home() {
 
     return () => {
       window.removeEventListener('portfolio_settings_updated', handleSettingsUpdate);
+      window.removeEventListener('portfolio_cache_invalidated', handleCacheInvalidated);
+      window.removeEventListener('storage', handleStorageChange);
     };
   }, []);
 
@@ -305,15 +329,15 @@ export default function Home() {
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                 </Link>
 
-                {/* Secondary Button - GitHub */}
+                {/* Secondary Button - Resume */}
                 <a
-                  href={settings?.github || 'https://github.com/Basiibnumoideen'}
+                  href={settings?.resumeURL || settings?.resumeUrl || '/Muhammed_Abdul_Basith_Resume.pdf'}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-2.5 px-8 py-4 rounded-2xl glass-panel text-foreground font-semibold text-sm hover:border-primary/60 hover:-translate-y-1 transition-all duration-300 shadow-md group cursor-pointer"
                 >
-                  <Github className="w-4 h-4 text-text-secondary group-hover:text-foreground transition-colors" />
-                  <span>GitHub</span>
+                  <FileText className="w-4 h-4 text-text-secondary group-hover:text-foreground transition-colors" />
+                  <span>Resume</span>
                 </a>
 
                 {/* Quick Copy Email Action */}
@@ -773,7 +797,7 @@ export default function Home() {
       {/* ============================================================ */}
       {/* 5. TESTIMONIALS SECTION: Dynamic Testimonials from MongoDB   */}
       {/* ============================================================ */}
-      {testimonials.length > 0 && (
+      {Array.isArray(testimonials) && testimonials.length > 0 && (
         <section className="py-32 relative border-t border-border/50 bg-grid-pattern">
           <div className="max-w-[1320px] mx-auto px-4 sm:px-6 lg:px-8">
             

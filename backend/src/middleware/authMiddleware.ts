@@ -64,6 +64,7 @@ export const authenticateAdmin = async (
         success: false,
         message: 'Forbidden. Admin privileges required.',
       });
+      return;
     }
 
     next();

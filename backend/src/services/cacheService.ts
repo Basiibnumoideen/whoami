@@ -87,17 +87,22 @@ class CacheService {
     if (!forceRefresh) {
       const cached = this.get<T>(cacheKey);
       if (cached) {
+        // Cache-Control headers based on browserMaxAge
+        const cacheControlHeader = browserMaxAge === 0
+          ? 'no-cache, no-store, must-revalidate'
+          : `public, max-age=${browserMaxAge}, stale-while-revalidate=600`;
+
         // Check Client ETag for 304 Not Modified
         const clientETag = req.headers['if-none-match'];
         if (clientETag && clientETag === cached.etag) {
-          res.setHeader('Cache-Control', `public, max-age=${browserMaxAge}, stale-while-revalidate=600`);
+          res.setHeader('Cache-Control', cacheControlHeader);
           res.setHeader('ETag', cached.etag);
           res.setHeader('X-Cache', 'HIT-304');
           res.status(304).end();
           return;
         }
 
-        res.setHeader('Cache-Control', `public, max-age=${browserMaxAge}, stale-while-revalidate=600`);
+        res.setHeader('Cache-Control', cacheControlHeader);
         res.setHeader('ETag', cached.etag);
         res.setHeader('X-Cache', 'HIT');
         res.status(200).json(cached.data);
@@ -109,7 +114,11 @@ class CacheService {
     const freshData = await fetchFn();
     const entry = this.set(cacheKey, freshData, ttlMs);
 
-    res.setHeader('Cache-Control', `public, max-age=${browserMaxAge}, stale-while-revalidate=600`);
+    const cacheControlHeader = browserMaxAge === 0
+      ? 'no-cache, no-store, must-revalidate'
+      : `public, max-age=${browserMaxAge}, stale-while-revalidate=600`;
+
+    res.setHeader('Cache-Control', cacheControlHeader);
     res.setHeader('ETag', entry.etag);
     res.setHeader('X-Cache', 'MISS');
     res.status(200).json(freshData);
