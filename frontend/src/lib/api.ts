@@ -116,7 +116,7 @@ export function getCached<T>(key: string): T | null {
           return parsed.data as T;
         }
       }
-    } catch {}
+    } catch { }
   }
   return null;
 }
@@ -132,7 +132,7 @@ export function setCached<T>(key: string, data: T): void {
   if (typeof window !== 'undefined') {
     try {
       sessionStorage.setItem(`portfolio_cache_${cleanKey}`, JSON.stringify(entry));
-    } catch {}
+    } catch { }
   }
 }
 
@@ -147,7 +147,7 @@ export function invalidateCache(namespace?: string): void {
           if (k && k.startsWith('portfolio_cache_')) keysToRemove.push(k);
         }
         keysToRemove.forEach((k) => sessionStorage.removeItem(k));
-      } catch {}
+      } catch { }
     }
     return;
   }
@@ -167,7 +167,7 @@ export function invalidateCache(namespace?: string): void {
         if (k && k.toLowerCase().includes(prefix)) keysToRemove.push(k);
       }
       keysToRemove.forEach((k) => sessionStorage.removeItem(k));
-    } catch {}
+    } catch { }
   }
 }
 
@@ -680,7 +680,7 @@ export const api = {
             writable: true,
             configurable: true,
           });
-        } catch {}
+        } catch { }
         return settingsObj;
       } catch {
         const fallback: any = {
@@ -712,7 +712,7 @@ export const api = {
             writable: true,
             configurable: true,
           });
-        } catch {}
+        } catch { }
         return fallback;
       }
     },
@@ -727,7 +727,7 @@ export const api = {
         try {
           localStorage.setItem('portfolio_settings', JSON.stringify(res.data));
           window.dispatchEvent(new CustomEvent('portfolio_settings_updated', { detail: res.data }));
-        } catch {}
+        } catch { }
       }
       return res;
     },

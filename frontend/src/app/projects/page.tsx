@@ -39,7 +39,10 @@ function ProjectsContent() {
   const searchParams = useSearchParams();
   const initialSkill = searchParams.get('skill');
 
-  const [projects, setProjects] = useState<ProjectItem[]>(() => api.getCached('projects') || []);
+  const [projects, setProjects] = useState<ProjectItem[]>(() => {
+    const cached = api.getCached<ProjectItem[]>('projects');
+    return Array.isArray(cached) ? cached : [];
+  });
   const [loading, setLoading] = useState(() => !api.hasCached('projects'));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
@@ -64,9 +67,11 @@ function ProjectsContent() {
   // Derive active skill filter without cascading effect
   const activeSkillFilter = manualSkillFilter ?? initialSkill;
 
-  const categories = ['All', ...Array.from(new Set(projects.map(p => p.category)))];
+  const projectList = Array.isArray(projects) ? projects : [];
 
-  const filteredProjects = projects.filter(project => {
+  const categories = ['All', ...Array.from(new Set(projectList.map(p => p.category)))];
+
+  const filteredProjects = projectList.filter(project => {
     const matchesCategory = selectedCategory === 'All' || project.category === selectedCategory;
     const matchesQuery = 
       project.title.toLowerCase().includes(searchQuery.toLowerCase()) ||

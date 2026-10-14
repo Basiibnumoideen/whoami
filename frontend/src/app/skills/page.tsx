@@ -18,7 +18,10 @@ interface SkillItem {
 }
 
 export default function SkillsPage() {
-  const [skills, setSkills] = useState<SkillItem[]>(() => api.getCached('skills') || []);
+  const [skills, setSkills] = useState<SkillItem[]>(() => {
+    const cached = api.getCached<SkillItem[]>('skills');
+    return Array.isArray(cached) ? cached : [];
+  });
   const [loading, setLoading] = useState(() => !api.hasCached('skills'));
 
   useEffect(() => {
@@ -45,6 +48,8 @@ export default function SkillsPage() {
     'DevOps & Cloud': { icon: Database, desc: 'Containerization, continuous integration, and infrastructure provisioning.' },
   };
 
+  const skillList = Array.isArray(skills) ? skills : [];
+
   // Dynamically extract all unique categories while preserving standard order first
   const uniqueCategoryNames = Array.from(new Set([
     'Frontend',
@@ -53,8 +58,8 @@ export default function SkillsPage() {
     'Database',
     'AI & Tools',
     'DevOps & Cloud',
-    ...skills.map(s => s.category)
-  ])).filter(cat => skills.some(s => s.category === cat));
+    ...skillList.map(s => s.category)
+  ])).filter(cat => skillList.some(s => s.category === cat));
 
   const categories = uniqueCategoryNames.map(name => ({
     name,
@@ -83,7 +88,7 @@ export default function SkillsPage() {
           <RefreshCw className="w-6 h-6 text-primary animate-spin" />
           <p className="text-xs font-mono text-text-secondary">Loading skills from database...</p>
         </div>
-      ) : skills.length === 0 ? (
+      ) : skillList.length === 0 ? (
         /* Professional Empty State (Problem 11) */
         <div className="p-16 text-center glass-card rounded-3xl border border-border/80">
           <Code2 className="w-12 h-12 text-primary mx-auto mb-4 opacity-50" />
@@ -96,7 +101,7 @@ export default function SkillsPage() {
         /* Categories Grid */
         <div className="space-y-16">
           {categories.map(cat => {
-            const categorySkills = skills.filter(s => s.category === cat.name);
+            const categorySkills = skillList.filter(s => s.category === cat.name);
             const Icon = cat.icon;
 
             return (

@@ -56,8 +56,14 @@ interface CertificationItem {
 
 
 export default function AboutPage() {
-  const [educationList, setEducationList] = useState<EducationItem[]>(() => api.getCached('education') || []);
-  const [certificationsList, setCertificationsList] = useState<CertificationItem[]>(() => api.getCached('certifications') || []);
+  const [educationList, setEducationList] = useState<EducationItem[]>(() => {
+    const cached = api.getCached<EducationItem[]>('education');
+    return Array.isArray(cached) ? cached : [];
+  });
+  const [certificationsList, setCertificationsList] = useState<CertificationItem[]>(() => {
+    const cached = api.getCached<CertificationItem[]>('certifications');
+    return Array.isArray(cached) ? cached : [];
+  });
   const [settings, setSettings] = useState<any>(() => {
     const mem = api.getCached('settings');
     if (mem) return mem;

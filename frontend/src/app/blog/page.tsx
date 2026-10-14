@@ -20,7 +20,10 @@ interface BlogPostItem {
 }
 
 export default function BlogPage() {
-  const [posts, setPosts] = useState<BlogPostItem[]>(() => api.getCached('blogs') || []);
+  const [posts, setPosts] = useState<BlogPostItem[]>(() => {
+    const cached = api.getCached<BlogPostItem[]>('blogs');
+    return Array.isArray(cached) ? cached : [];
+  });
   const [loading, setLoading] = useState(() => !api.hasCached('blogs'));
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');

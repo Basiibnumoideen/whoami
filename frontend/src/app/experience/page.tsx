@@ -22,7 +22,10 @@ interface ExperienceItem {
 }
 
 export default function ExperiencePage() {
-  const [experiences, setExperiences] = useState<ExperienceItem[]>(() => api.getCached('experiences') || []);
+  const [experiences, setExperiences] = useState<ExperienceItem[]>(() => {
+    const cached = api.getCached<ExperienceItem[]>('experiences');
+    return Array.isArray(cached) ? cached : [];
+  });
   const [loading, setLoading] = useState(() => !api.hasCached('experiences'));
 
   useEffect(() => {

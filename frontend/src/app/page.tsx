@@ -46,10 +46,22 @@ export default function Home() {
   const [selectedProjectForModal, setSelectedProjectForModal] = useState<any | null>(null);
 
   // Dynamic MongoDB state with instant cache hydration
-  const [projects, setProjects] = useState<any[]>(() => api.getCached('projects') || []);
-  const [skills, setSkills] = useState<any[]>(() => api.getCached('skills') || []);
-  const [services, setServices] = useState<any[]>(() => (api.getCached<any[]>('services') || []).filter((s: any) => s.status !== 'inactive'));
-  const [testimonials, setTestimonials] = useState<any[]>(() => api.getCached('testimonials') || []);
+  const [projects, setProjects] = useState<any[]>(() => {
+    const cached = api.getCached<any[]>('projects');
+    return Array.isArray(cached) ? cached : [];
+  });
+  const [skills, setSkills] = useState<any[]>(() => {
+    const cached = api.getCached<any[]>('skills');
+    return Array.isArray(cached) ? cached : [];
+  });
+  const [services, setServices] = useState<any[]>(() => {
+    const cached = api.getCached<any[]>('services');
+    return Array.isArray(cached) ? cached.filter((s: any) => s.status !== 'inactive') : [];
+  });
+  const [testimonials, setTestimonials] = useState<any[]>(() => {
+    const cached = api.getCached<any[]>('testimonials');
+    return Array.isArray(cached) ? cached : [];
+  });
   const [settings, setSettings] = useState<any>(() => {
     const mem = api.getCached('settings');
     if (mem) return mem;
